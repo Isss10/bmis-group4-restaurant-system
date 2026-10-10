@@ -1,0 +1,22 @@
+# Normalise line endings: LF in the repository, platform-native on checkout.
+# Prevents whole-file diffs when Windows and macOS teammates touch the same file.
+* text=auto eol=lf
+
+# Windows-specific scripts keep CRLF
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+*.ps1  text eol=crlf
+
+# Never touch binary files
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.pdf  binary
+*.zip  binary
+*.jar  binary
+*.woff binary
+*.woff2 binary
+*.ttf  binary
+*.eot  binary

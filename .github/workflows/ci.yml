@@ -1,0 +1,225 @@
+name: CI
+
+# Runs on every pull request into main, and on direct pushes to main.
+# The proposal (Objective f) requires CI on every pull request.
+#
+# ⚠️ BEFORE THE TEAM STARTS CODING:
+# The `build-and-test` job below is a SKELETON. It detects the stack from the
+# files present in the repository and skips when nothing is found, so it stays
+# green while the repo is empty. Once the language/framework is decided, replace
+# the relevant section with the real build + test + coverage commands and delete
+# the others. A permanently-red pipeline blocks all ten contributors — do not
+# merge a change that leaves CI failing.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# Cancel superseded runs on the same branch to save CI minutes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1. Sanity checks that always run, regardless of stack.
+  # ---------------------------------------------------------------------------
+  repo-hygiene:
+    name: Repo hygiene
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Block committed secrets and env files
+        run: |
+          echo "Scanning for files that must never be committed..."
+          FAILED=0
+          while IFS= read -r f; do
+            echo "::error::Forbidden file committed: $f"
+            FAILED=1
+          done < <(git ls-files | grep -E '(^|/)\.env$|(^|/)\.env\.[^e]|\.pem$|\.p12$|\.jks$|(^|/)secrets/' || true)
+          if [ "$FAILED" -ne 0 ]; then
+            echo "Remove the file(s) above, add the pattern to .gitignore, and re-commit."
+            echo "If a real credential was pushed, ROTATE IT — deleting the file is not enough."
+            exit 1
+          fi
+          echo "OK: no forbidden files."
+
+      - name: Scan tracked files for hardcoded credential patterns
+        run: |
+          echo "Scanning tracked files for likely hardcoded credentials..."
+          MATCHES=$(git ls-files -z \
+            | xargs -0 grep -nEI '(password|passwd|pwd|secret|api[_-]?key|access[_-]?token)[[:space:]]*[:=][[:space:]]*["'"'"'][^"'"'"']{8,}["'"'"']' \
+            || true)
+          if [ -n "$MATCHES" ]; then
+            echo "::warning::Possible hardcoded credentials found. Verify each line is a placeholder, not a real value:"
+            echo "$MATCHES"
+          else
+            echo "OK: no obvious hardcoded credentials."
+          fi
+
+      - name: Require a meaningful commit message subject
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            MSG="${{ github.event.pull_request.title }}"
+          else
+            MSG="${{ github.event.head_commit.message }}"
+          fi
+          echo "Subject: $MSG"
+          FIRST_LINE=$(printf '%s' "$MSG" | head -n 1)
+          if printf '%s' "$FIRST_LINE" | grep -qE '^(feat|fix|docs|test|refactor|perf|chore|ci|build|style|revert)(\([a-z0-9-]+\))?!?: .+'; then
+            echo "OK: follows Conventional Commits."
+          elif [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "::warning::PR title does not follow Conventional Commits (see CONTRIBUTING.md §5). Non-blocking."
+          fi
+
+  # ---------------------------------------------------------------------------
+  # 2. Build + test + coverage. Skeleton — fill in once the stack is decided.
+  # ---------------------------------------------------------------------------
+  build-and-test:
+    name: Build & test
+    runs-on: ubuntu-latest
+
+    # The proposal specifies a self-hosted relational database (MySQL/PostgreSQL).
+    # Uncomment the service your integration tests need.
+    # services:
+    #   postgres:
+    #     image: postgres:16
+    #     env:
+    #       POSTGRES_USER: test
+    #       POSTGRES_PASSWORD: test
+    #       POSTGRES_DB: restaurant_test
+    #     ports: ['5432:5432']
+    #     options: >-
+    #       --health-cmd pg_isready
+    #       --health-interval 10s
+    #       --health-timeout 5s
+    #       --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ---------------- Java / Spring Boot ----------------
+      - name: Detect Java project
+        id: detect-java
+        run: |
+          if [ -f pom.xml ] || ls build.gradle build.gradle.kts settings.gradle settings.gradle.kts >/dev/null 2>&1; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up JDK 17
+        if: steps.detect-java.outputs.found == 'true'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+
+      - name: Maven build + test + coverage
+        if: steps.detect-java.outputs.found == 'true' && hashFiles('pom.xml') != ''
+        run: mvn -B verify
+
+      # ---------------- Python ----------------
+      - name: Detect Python project
+        id: detect-python
+        run: |
+          if [ -f requirements.txt ] || [ -f pyproject.toml ] || [ -f setup.py ]; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Python
+        if: steps.detect-python.outputs.found == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install Python dependencies
+        if: steps.detect-python.outputs.found == 'true'
+        run: |
+          python -m pip install --upgrade pip
+          [ -f requirements.txt ] && pip install -r requirements.txt || true
+          pip install pytest pytest-cov || true
+
+      - name: Pytest with coverage
+        if: steps.detect-python.outputs.found == 'true'
+        run: |
+          pytest tests/ --cov=src --cov-report=term-missing --cov-report=xml || \
+            echo "::warning::Tests not runnable yet. Replace this fallback once real tests exist."
+
+      # ---------------- Node / JavaScript / TypeScript ----------------
+      - name: Detect Node project
+        id: detect-node
+        run: |
+          if [ -f package.json ]; then echo "found=true" >> "$GITHUB_OUTPUT"; else echo "found=false" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Set up Node
+        if: steps.detect-node.outputs.found == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: npm install + test
+        if: steps.detect-node.outputs.found == 'true'
+        run: |
+          npm ci
+          npm test --if-present
+
+      # ---------------- Coverage artefact ----------------
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: |
+            coverage/
+            **/target/site/jacoco/
+            coverage.xml
+          if-no-files-found: ignore
+
+      - name: Report skeleton status
+        if: steps.detect-java.outputs.found == 'false' && steps.detect-python.outputs.found == 'false' && steps.detect-node.outputs.found == 'false'
+        run: |
+          echo "::notice::No Java, Python or Node project detected. The build/test job ran no real tests."
+          echo "::notice::Once the stack is chosen, replace this skeleton in .github/workflows/ci.yml with the real build, test and coverage commands."
+
+  # ---------------------------------------------------------------------------
+  # 3. Docker image builds once deploy/docker/ contains a Dockerfile.
+  # ---------------------------------------------------------------------------
+  docker-build:
+    name: Docker build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Detect Dockerfile
+        id: detect-docker
+        run: |
+          if ls deploy/docker/Dockerfile Dockerfile >/dev/null 2>&1; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build image
+        if: steps.detect-docker.outputs.found == 'true'
+        run: |
+          if [ -f deploy/docker/Dockerfile ]; then
+            docker build -f deploy/docker/Dockerfile -t restaurant-system:ci .
+          else
+            docker build -t restaurant-system:ci .
+          fi
+
+      - name: Note
+        if: steps.detect-docker.outputs.found == 'false'
+        run: echo "::notice::No Dockerfile yet. Docker packaging is scheduled for the Final Preparation phase (14 Dec 2026)."
