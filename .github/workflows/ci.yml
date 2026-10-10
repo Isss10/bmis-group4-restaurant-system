@@ -63,18 +63,24 @@ jobs:
             echo "OK: no obvious hardcoded credentials."
           fi
 
-      - name: Require a meaningful commit message subject
+      # Untrusted text (PR titles, commit messages) is passed through env, never
+      # interpolated straight into the shell — that would allow script injection.
+      - name: Check commit message convention
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
         run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            MSG="${{ github.event.pull_request.title }}"
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            MSG="$PR_TITLE"
           else
-            MSG="${{ github.event.head_commit.message }}"
+            MSG="$COMMIT_MSG"
           fi
           echo "Subject: $MSG"
           FIRST_LINE=$(printf '%s' "$MSG" | head -n 1)
           if printf '%s' "$FIRST_LINE" | grep -qE '^(feat|fix|docs|test|refactor|perf|chore|ci|build|style|revert)(\([a-z0-9-]+\))?!?: .+'; then
             echo "OK: follows Conventional Commits."
-          elif [ "${{ github.event_name }}" = "pull_request" ]; then
+          elif [ "$EVENT_NAME" = "pull_request" ]; then
             echo "::warning::PR title does not follow Conventional Commits (see CONTRIBUTING.md §5). Non-blocking."
           fi
 
