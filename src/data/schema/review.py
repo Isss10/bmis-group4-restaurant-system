@@ -1,7 +1,9 @@
 # src/data/schema/review.py
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime, Float
+
+from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
+
 from src.data.schema.base import Base
 
 
@@ -12,8 +14,8 @@ class Review(Base):
     customer_id = Column(Integer, ForeignKey("customers.id"), nullable=False, index=True)
     dish_id = Column(Integer, ForeignKey("dishes.id"), nullable=False, index=True)
     order_id = Column(Integer, ForeignKey("orders.id"), nullable=False, index=True)
-    rating = Column(Integer, nullable=False)          # 1-5 星
-    content = Column(Text, nullable=True)              # 评论文字，可为空
+    rating = Column(Integer, nullable=False)  # 1-5 星
+    content = Column(Text,nullable=True)  # 评论文字,可为空
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     moderation = relationship("ReviewModeration", back_populates="review", uselist=False)
@@ -38,5 +40,5 @@ class DishRatingStats(Base):
     dish_id = Column(Integer, ForeignKey("dishes.id"), primary_key=True)
     review_count = Column(Integer, nullable=False, default=0)
     bayesian_score = Column(Float, nullable=False, default=0.0)
-    global_mean = Column(Float, nullable=False, default=0.0)   # 全局均值，每晚重算
+    global_mean = Column(Float,nullable=False,default=0.0)  # 全局均值,每晚重算
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

@@ -16,50 +16,49 @@ To correct a mistake, generate a NEW migration (CONTRIBUTING.md §8).
 
 from __future__ import annotations
 
-from typing import Sequence, Union
+from collections.abc import Sequence
 
-from alembic import op
 import sqlalchemy as sa
-
+from alembic import op
 
 # Alembic revision identifiers. Do not change these by hand.
-revision: str = 'fcbacdb70997'
-down_revision: Union[str, None] = '72386ef1d8b4'
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+revision: str = "fcbacdb70997"
+down_revision: str | None = "72386ef1d8b4"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
     op.create_table(
-        'reviews',
-        sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
-        sa.Column('customer_id', sa.Integer(), nullable=False),
-        sa.Column('dish_id', sa.Integer(), nullable=False),
-        sa.Column('order_id', sa.Integer(), nullable=False),
-        sa.Column('rating', sa.Integer(), nullable=False),
-        sa.Column('content', sa.Text(), nullable=True),
-        sa.Column('created_at', sa.DateTime(), nullable=False),
-        sa.PrimaryKeyConstraint('id')
+        "reviews",
+        sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
+        sa.Column("customer_id", sa.Integer(), nullable=False),
+        sa.Column("dish_id", sa.Integer(), nullable=False),
+        sa.Column("order_id", sa.Integer(), nullable=False),
+        sa.Column("rating", sa.Integer(), nullable=False),
+        sa.Column("content", sa.Text(), nullable=True),
+        sa.Column("created_at", sa.DateTime(), nullable=False),
+        sa.PrimaryKeyConstraint("id"),
     )
     op.create_table(
-        'review_moderation',
-        sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
-        sa.Column('review_id', sa.Integer(), nullable=False),
-        sa.Column('status', sa.String(length=20), nullable=False),
-        sa.Column('moderated_by', sa.Integer(), nullable=True),
-        sa.Column('moderated_at', sa.DateTime(), nullable=True),
-        sa.Column('reason', sa.String(length=200), nullable=True),
-        sa.PrimaryKeyConstraint('id'),
-        sa.UniqueConstraint('review_id')
+        "review_moderation",
+        sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
+        sa.Column("review_id", sa.Integer(), nullable=False),
+        sa.Column("status", sa.String(length=20), nullable=False),
+        sa.Column("moderated_by", sa.Integer(), nullable=True),
+        sa.Column("moderated_at", sa.DateTime(), nullable=True),
+        sa.Column("reason", sa.String(length=200), nullable=True),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("review_id"),
     )
     op.create_table(
-        'dish_rating_stats',
-        sa.Column('dish_id', sa.Integer(), nullable=False),
-        sa.Column('review_count', sa.Integer(), nullable=False),
-        sa.Column('bayesian_score', sa.Float(), nullable=False),
-        sa.Column('global_mean', sa.Float(), nullable=False),
-        sa.Column('updated_at', sa.DateTime(), nullable=True),
-        sa.PrimaryKeyConstraint('dish_id')
+        "dish_rating_stats",
+        sa.Column("dish_id", sa.Integer(), nullable=False),
+        sa.Column("review_count", sa.Integer(), nullable=False),
+        sa.Column("bayesian_score", sa.Float(), nullable=False),
+        sa.Column("global_mean", sa.Float(), nullable=False),
+        sa.Column("updated_at", sa.DateTime(), nullable=True),
+        sa.PrimaryKeyConstraint("dish_id"),
     )
 
     """Apply the schema change."""
@@ -67,9 +66,9 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_table('dish_rating_stats')
-    op.drop_table('review_moderation')
-    op.drop_table('reviews')
+    op.drop_table("dish_rating_stats")
+    op.drop_table("review_moderation")
+    op.drop_table("reviews")
     """Reverse the schema change.
 
     A migration with no downgrade is a one-way door. If the change genuinely
