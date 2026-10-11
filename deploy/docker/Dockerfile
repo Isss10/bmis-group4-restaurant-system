@@ -63,6 +63,17 @@ RUN pip install --no-cache-dir --no-index --find-links=/wheels /wheels/* \
 # process cannot modify its own code to establish persistence.
 COPY --chown=root:root src/ ./src/
 
+# alembic.ini lives at the repository root, OUTSIDE src/, so the COPY above does
+# not bring it in. The compose entrypoint runs `alembic upgrade head` before
+# starting uvicorn; without this file that command fails with
+# "No config file 'alembic.ini' found" and the container exits immediately.
+# The migrations themselves (src/data/migration/) already ship inside src/.
+#
+# alembic.ini carries no credentials — the database URL is resolved at runtime
+# from settings/env.py (see the comment at the top of that file), which is why
+# committing and copying it is safe.
+COPY --chown=root:root alembic.ini ./alembic.ini
+
 # Metadata for support and for the /health endpoint.
 LABEL org.opencontainers.image.title="Restaurant Reservation & Food-Ordering System API" \
       org.opencontainers.image.description="JC2001 BMIS Group 4 — FastAPI backend" \
