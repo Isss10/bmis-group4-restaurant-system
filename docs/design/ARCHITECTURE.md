@@ -467,25 +467,42 @@ them in week eight.
 
 ---
 
-## 13. Open questions to resolve before implementation
+## 13. Business rules to settle before implementation
 
-Assign each to an owner in the group chat; they block real coding.
+Status as of 11 Oct 2026, checked against the frozen contracts in
+`JC2001-Group4-协作与统一标准手册.md`. The authoritative decision table — including proposed
+values, owners and deadlines — is `docs/requirements/REQUIREMENTS.md` §6. **Read that table, not
+this list, before coding**: it is where agreed values get written back.
 
-1. **Slot granularity** — 30 min, 60 min, or 90 min? Determines the unique
-   constraint and the whole availability UI. *(Owner: KEYING CHEN + YUANYUAN XUE)*
-2. **How long may a party keep a table?** A 2-hour seating cap affects turnover
-   analytics. *(Owner: KEYING CHEN)*
-3. **Points earning rule** — per yuan spent, or per order? Expiry window?
-   *(Owner: RONG CONG + GEMAN MENG)*
-4. **Coupon stacking** — the proposal says "clearly defined discount-stacking
-   rules". Define them: which combinations are legal, and in what order are
-   discounts applied? Order changes the total. *(Owner: RONG CONG + GEMAN MENG)*
-5. **Bayesian `m`** — what review count counts as "established"? Needs a
-   decision before the ranking can be evaluated. *(Owner: RUNYI PENG)*
-6. **Recommender inputs** — collaborative filtering on order history, content-based
-   on dish categories, or both? "Hybrid" needs a concrete definition to be
-   evaluated with Precision@K and MAE. *(Owner: HUANPAI LI + RUNYI PENG)*
-7. **Moderation policy** — auto-publish then review, or hold until approved?
-   Affects the review module's state machine. *(Owner: RUNYI PENG)*
-8. **No-show definition** — a confirmed reservation not seated within how many
-   minutes? The analytics rate depends on it. *(Owner: HUANPAI LI)*
+### Settled by the frozen manual — do not relitigate
+
+1. **Slot granularity: 30 minutes.** Manual §5.1 (`time_slots` table). Determines the unique
+   constraint and the whole availability UI. *(M2 + M8)*
+2. **Moderation policy: hold until approved.** New reviews enter `PENDING` and appear publicly
+   only after `APPROVED` (manual §4.5, `ReviewStatus`). *(M9)*
+3. **Points ledger is append-only.** Transaction types `EARN / REDEEM / EXPIRE / ADJUST` are
+   frozen; balance is derived, never edited (manual §4.5). The *rate and expiry window* are still
+   open — see item 3 below. *(M4)*
+
+### Still open — each blocks real coding for its module
+
+1. **How long may a party keep a table?** A seating cap affects turnover analytics.
+   Proposed: 120 min soft warning, 180 min hard cap, by 20 Oct. *(KEYING CHEN)*
+2. **Points earning rule and expiry window.** The ledger shape is frozen; the economics are not.
+   Proposed: 1 point per ¥10, expiry 12 months, by 20 Oct. *(RONG CONG + GEMAN MENG)*
+3. **Coupon discount application order.** The `EXCLUSIVE`/`STACKABLE` vocabulary is frozen; the
+   order in which stacked discounts apply is not, and order changes the total.
+   Proposed: percentage first, then fixed amount, capped at order total, by 20 Oct.
+   *(RONG CONG + GEMAN MENG)*
+4. **Bayesian `m`** — what review count counts as "established"? Needed before the ranking can be
+   evaluated. Proposed: `m = 15` with nightly recomputed global mean `C`, by 10 Nov. *(RUNYI PENG)*
+5. **Recommender inputs** — "hybrid" needs a concrete definition to be evaluated with Precision@K
+   and MAE. Proposed: 0.7 item-based collaborative filtering + 0.3 category-content similarity,
+   evaluated on the seeded orders, by 10 Nov. *(HUANPAI LI + RUNYI PENG)*
+6. **No-show definition** — a confirmed reservation not seated within how many minutes? The
+   analytics rate depends on it. Proposed: 20 minutes past slot start, marked by staff, by 20 Oct.
+   *(HUANPAI LI + KEYING CHEN)*
+
+When a value is agreed in the group chat, the owner updates both this section and
+`REQUIREMENTS.md` §6 in the same PR that touches the code, so the document, the contract and the
+implementation never disagree.

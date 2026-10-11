@@ -167,7 +167,13 @@ deploy/docker/              Multi-stage Dockerfile + docker-compose with MySQL 8
 | `src/data/schema/` | the ORM models for every table | YUANYUAN XUE |
 | `src/presentation/{web,staff,manager}/` | the three Vue SPAs | module owners |
 | `tests/integration/`, `tests/concurrency/` | DB-backed tests; the concurrent-booking test | GEMAN MENG, JIAYI TAN |
-| `docs/{requirements,testing,user-manual}/` | requirements, test report, user manual | per §6 |
+| `docs/testing/`, `docs/user-manual/` | concurrency test report, user manual | GEMAN MENG + JIAYI TAN |
+
+`docs/requirements/REQUIREMENTS.md` is the Phase-1 deliverable: use-case diagrams per module,
+numbered functional and non-functional requirements, the traceability matrix
+(objective → requirement → test → owner), and the decision table for the business rules that are
+still open (§6 of that document). **Read §6 before Wave-2 coding** — six rules there block real
+implementation until the group settles them.
 
 `src/presentation/api/main.py` registers module routers by convention: create a
 `router` object in `src/application/<module>/router.py` and it is mounted at
