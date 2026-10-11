@@ -1,0 +1,165 @@
+{
+  "components": {
+    "schemas": {
+      "CurrentIdentity": {
+        "description": "What `/api/v1/auth/me` returns about the caller.\n\nDeliberately narrow. It is the minimum the SPA needs to render the right\nnavigation and to decide whether to refresh the token — and it is derived\nfrom a *verified* token rather than from anything the client sends.\n\nNo email, no points balance, no membership tier: those belong to the\nmembership module's own endpoints, and returning them here would let every\nfrontend depend on a shape the membership owner has to keep stable.",
+        "properties": {
+          "expires_at": {
+            "title": "Expires At",
+            "type": "integer"
+          },
+          "role": {
+            "$ref": "#/components/schemas/Role"
+          },
+          "token_id": {
+            "title": "Token Id",
+            "type": "string"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "role",
+          "token_id",
+          "expires_at"
+        ],
+        "title": "CurrentIdentity",
+        "type": "object"
+      },
+      "HealthResponse": {
+        "description": "Liveness/readiness payload.",
+        "properties": {
+          "app": {
+            "title": "App",
+            "type": "string"
+          },
+          "environment": {
+            "title": "Environment",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "app",
+          "version",
+          "environment"
+        ],
+        "title": "HealthResponse",
+        "type": "object"
+      },
+      "Role": {
+        "description": "System roles, ordered from least to most privileged.\n\n`StrEnum` means the value used in JWT claims and database columns is the\nplain lowercase string (\"manager\"), while code compares against the enum\nand cannot typo a role name.",
+        "enum": [
+          "customer",
+          "waiter",
+          "manager",
+          "admin"
+        ],
+        "title": "Role",
+        "type": "string"
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "bearerFormat": "JWT",
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "description": "\nRestaurant reservation and food-ordering system — JC2001 BMIS Group 4.\n\n**Modules**\n\n| Module | Base path | Objective |\n|--------|-----------|-----------|\n| Health & metadata | `/health` | — |\n| Reservation (seat booking, holds, state machine) | `/api/v1/reservations` | (a) |\n| Ordering (menu browsing, order submission) | `/api/v1/orders` | (a) |\n| Staff backend (reservation list, status, orders) | `/api/v1/staff` | (b) |\n| Membership & loyalty (auth, points, tiers, coupons) | `/api/v1/membership` | (c) |\n| Ratings & reviews (order-verified, Bayesian ranking) | `/api/v1/reviews` | (c) |\n| Analytics (manager dashboard, recommender) | `/api/v1/analytics` | (e) |\n\n**Authentication** — JWT bearer tokens. Click *Authorize* and paste the token\nreturned by the login endpoint. Roles: `customer`, `waiter`, `manager`, `admin`.\n\n**Errors** — every error response has the shape\n`{\"error\": {\"code\": <int>, \"message\": <str>, \"request_id\": <str>}}`.\nQuote the `request_id` when reporting a problem; it links the response to the\nserver log and to any audit record.\n",
+    "title": "Restaurant Reservation & Food-Ordering System",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/": {
+      "get": {
+        "description": "Return the service name, version and the API base path.\n\nDeliberately discloses nothing beyond what is already public in the\nrepository.",
+        "operationId": "root__get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Root  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Service index",
+        "tags": [
+          "meta"
+        ]
+      }
+    },
+    "/api/v1/auth/me": {
+      "get": {
+        "description": "Return the caller's id, role and token expiry.\n\nRequires a valid bearer token. Returns 401 with\n`WWW-Authenticate: Bearer` (RFC 6750 §3) when it is absent or invalid.",
+        "operationId": "me_api_v1_auth_me_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CurrentIdentity"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Missing, malformed or expired token"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Current identity",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/health": {
+      "get": {
+        "description": "Return process liveness without touching the database.\n\nKept dependency-free on purpose: when MySQL is down we still want the\ncontainer to report that the *process* is alive, so the orchestrator\nrestarts the database rather than killing the API in a loop.\n\nSettings are read from `app.state`, not from `get_settings()`, so an app\nbuilt with custom settings (tests) reports its own environment rather\nthan the process-wide one.",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Liveness probe",
+        "tags": [
+          "health"
+        ]
+      }
+    }
+  }
+}

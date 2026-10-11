@@ -1,0 +1,45 @@
+# Development & CI dependencies
+#
+# Install:  pip install -r requirements.txt -r requirements-dev.txt
+# These are the tools CI enforces on every pull request (see .github/workflows/ci.yml).
+
+# --- Testing: unit / integration / concurrency in one stack (Objective d) ---
+# Lower bounds are set by pip-audit, not by preference:
+#   pytest >= 9.0.3  fixes PYSEC-2026-1845
+#   black  >= 26.3.1 fixes PYSEC-2026-2120 and PYSEC-2026-2121
+# Ceilings that sit below a security fix make `pip-audit --strict` fail CI on
+# every pull request, which trains the team to ignore a red pipeline.
+pytest>=9.0.3,<10.0
+pytest-asyncio>=1.0,<2.0          # 1.x avoids the asyncio.get_event_loop_policy()
+                                  # DeprecationWarning that 0.25.x raises on
+                                  # Python 3.12+; this suite runs with
+                                  # filterwarnings=["error"], so 0.25.x would fail
+                                  # every test at setup on a modern interpreter.
+pytest-cov>=5.0,<7.0              # coverage reports (Objective f)
+coverage[toml]>=7.4,<8.0
+# starlette >=1.7 TestClient imports httpx2 first and only falls back to httpx
+# with a StarletteDeprecationWarning. Under filterwarnings=["error"] that
+# fallback fails the whole suite, so httpx2 is required, not optional.
+httpx2>=2.0,<3.0
+httpx>=0.27,<1.0                  # still pulled in transitively; harmless
+
+# --- Lint & format: Ruff + Black + mypy, enforced in CI ---
+ruff>=0.4,<1.0
+black>=26.3.1,<27.0
+mypy>=1.9,<2.0
+
+# --- Type stubs, ONLY for third-party libs that ship no inline types ---
+# PyJWT (>=2.4) and cryptography both ship a py.typed marker with correct
+# inline annotations. Installing the old types-PyJWT / types-cryptography stubs
+# SHADOWS those annotations with PyJWT-1.x-era signatures -- notably
+# `jwt.encode() -> bytes`, which is wrong for PyJWT 2.x (it returns str) and
+# makes mypy report a false type error at every token-signing call site. So:
+# do NOT re-add types-PyJWT or types-cryptography.
+types-passlib>=1.7,<2.0           # passlib ships no py.typed; this stub is real
+
+# --- Security scanning: OWASP Top 10 hardening evidence (Objective f) ---
+bandit>=1.7,<2.0                  # static security analysis of Python code
+pip-audit>=2.7,<3.0               # known-vulnerability scan of dependencies
+
+# --- Local API docs export (openapi.json archiving) ---
+# FastAPI exposes /openapi.json at runtime; no extra dep needed.
