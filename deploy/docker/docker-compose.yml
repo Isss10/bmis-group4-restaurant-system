@@ -1,0 +1,157 @@
+# ---------------------------------------------------------------------------
+# One-command local stack: MySQL 8.0 + the FastAPI application.
+#
+# 技术选型 promises "Docker + docker-compose — 一键启动".
+#
+# From the repository root:
+#     docker compose -f deploy/docker/docker-compose.yml up --build
+#
+# Then:
+#     API          http://localhost:8000
+#     API docs     http://localhost:8000/docs
+#     Health       http://localhost:8000/health
+#     MySQL        localhost:3307  (host port 3307 avoids clashing with a local
+#                                   MySQL already running on 3306)
+#
+# Stop and keep data:  docker compose -f deploy/docker/docker-compose.yml down
+# Stop and DELETE the database volume:
+#                      docker compose -f deploy/docker/docker-compose.yml down -v
+# ---------------------------------------------------------------------------
+
+name: restaurant-system
+
+services:
+  # -------------------------------------------------------------------------
+  # MySQL 8.0 — the transactional store the concurrency guarantee depends on.
+  # InnoDB is the default engine in 8.0; it provides the row locks, transactions
+  # and unique constraints that Objective (d) requires. MyISAM would not.
+  # -------------------------------------------------------------------------
+  db:
+    image: mysql:8.0
+    container_name: restaurant-db
+    restart: unless-stopped
+    environment:
+      # ⚠️ DEVELOPMENT CREDENTIALS ONLY. These are committed on purpose because
+      #    they are placeholders for a throwaway local container — the same
+      #    values appear in .env.example. Never reuse them anywhere real.
+      MYSQL_ROOT_PASSWORD: local-dev-root-password
+      MYSQL_DATABASE: restaurant
+      MYSQL_USER: restaurant
+      MYSQL_PASSWORD: local-dev-password
+      TZ: Asia/Shanghai
+    command:
+      # utf8mb4 is required for full CJK and emoji support; MySQL's legacy
+      # 3-byte `utf8` silently corrupts them.
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      # REPEATABLE READ is MySQL's default and what src/data/database.py sets
+      # per-session. Declaring it here makes the guarantee explicit rather than
+      # incidental to a version default.
+      - --transaction-isolation=REPEATABLE-READ
+      # Strict mode: reject out-of-range and malformed values instead of
+      # truncating them silently. Silent truncation of a booking's guest count
+      # is exactly the class of bug this project exists to prevent.
+      - --sql-mode=STRICT_TRANS_TABLES,NO_ENGINE_SUBSTITUTION
+      - --default-authentication-plugin=caching_sha2_password
+      # Lower the connection ceiling for a dev box so a leaked pool is visible
+      # as an error rather than as a frozen laptop.
+      - --max-connections=200
+    ports:
+      # host 3307 -> container 3306, so this does not fight a locally installed
+      # MySQL. Change the left-hand side if 3307 is also taken.
+      - "3307:3306"
+    volumes:
+      # Named volume: data survives `down` but not `down -v`.
+      - mysql-data:/var/lib/mysql
+      # Anything in this directory runs once, alphabetically, on first init only.
+      # Use it for seed data (tables, menu items) — see deploy/docker/initdb/.
+      - ./initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      # `mysqladmin ping` alone succeeds before the server accepts real queries;
+      # running an actual SELECT is what proves readiness.
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-plocal-dev-root-password"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+
+  # -------------------------------------------------------------------------
+  # FastAPI application.
+  # -------------------------------------------------------------------------
+  api:
+    build:
+      # The build context is the repository root, because the Dockerfile does
+      # `COPY requirements.txt` and `COPY src/`.
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+    container_name: restaurant-api
+    restart: unless-stopped
+    depends_on:
+      # `service_healthy`, not `service_started`: the API must not boot before
+      # MySQL can actually answer queries, or the first requests fail.
+      db:
+        condition: service_healthy
+    environment:
+      # development, not production, so that /docs stays reachable and a
+      # developer-grade secret is accepted. The production image defaults to
+      # APP_ENVIRONMENT=production and would refuse to start with these values —
+      # which is the intended behaviour, not an inconsistency.
+      APP_ENVIRONMENT: development
+      APP_LOG_LEVEL: INFO
+      # Reach MySQL by its service name inside the compose network, not by
+      # localhost — localhost inside this container is the container itself.
+      APP_DB_HOST: db
+      APP_DB_PORT: "3306"
+      APP_DB_USER: restaurant
+      APP_DB_PASSWORD: local-dev-password
+      APP_DB_NAME: restaurant
+      # The frontend runs on the host at Vite's default port.
+      APP_CORS_ORIGINS: http://localhost:5173
+      APP_JWT_SECRET_KEY: local-dev-only-secret-change-me-before-any-real-use
+      APP_ACCESS_TOKEN_EXPIRE_MINUTES: "60"
+      APP_SEAT_HOLD_TTL_SECONDS: "600"
+      APP_RATE_LIMIT_ENABLED: "true"
+      APP_RATE_LIMIT_DEFAULT: 200/minute
+      APP_RATE_LIMIT_REVIEW: 5/minute
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    # Apply migrations on start, then serve. Without this, a fresh volume has
+    # no tables and every request 500s.
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn src.presentation.api.main:app --host 0.0.0.0 --port 8000"
+
+  # -------------------------------------------------------------------------
+  # phpMyAdmin — optional browser UI for inspecting the database.
+  # Handy while designing the schema; comment this block out if you do not want
+  # it, and do NOT expose it in any production deployment.
+  # -------------------------------------------------------------------------
+  phpmyadmin:
+    image: phpmyadmin:5
+    container_name: restaurant-pma
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PMA_HOST: db
+      PMA_PORT: "3306"
+      UPLOAD_LIMIT: 64M
+    ports:
+      - "8081:80"
+    profiles:
+      # Only starts when explicitly requested, so the default stack stays lean:
+      #   docker compose -f deploy/docker/docker-compose.yml --profile tools up
+      - tools
+
+volumes:
+  mysql-data:
+    name: restaurant-mysql-data
+
+# The default bridge network is sufficient; services reach each other by name.

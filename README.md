@@ -51,13 +51,51 @@ transactional consistency.
 
 ## 3. Engineering quality commitments
 
-- Three-tier architecture with a **documented REST API**
-- Unit / integration / concurrency tests with **coverage reports**
-- **CI running on every pull request**
-- **OWASP Top 10** hardening
-- **Audit logs** for back-office changes
-- **Docker** deployment
-- A **user manual** covering all modules
+| Commitment | Status | Where |
+|---|---|---|
+| Three-tier architecture with a **documented REST API** | ✅ framework in place | `docs/design/ARCHITECTURE.md`, `docs/api/openapi.json` |
+| Unit / integration / concurrency tests with **coverage reports** | 🟡 unit 184 passing (80.5% coverage); integration & concurrency pending | `tests/` |
+| **CI running on every pull request** | ✅ live | `.github/workflows/ci.yml` |
+| **OWASP Top 10** hardening | 🟡 framework-level controls done; per-endpoint validation pending | `src/common/`, `ARCHITECTURE.md` §10 |
+| **Audit logs** for back-office changes | ✅ implemented, not yet wired to module endpoints | `src/common/audit.py` |
+| **Docker** deployment | ✅ configured, not yet smoke-tested | `deploy/docker/` |
+| A **user manual** covering all modules | ⬜ not started (due 04 Dec) | `docs/user-manual/` |
+
+### Technology stack
+
+Decided in `技术选型.docx`; do not change it without a group decision, because
+CI, the Dockerfile and every module's imports depend on it.
+
+| Layer | Choice |
+|---|---|
+| Language | **Python 3.11** |
+| Web framework | **FastAPI** + Uvicorn (auto-generated OpenAPI = the documented REST API) |
+| Validation | **Pydantic v2** + pydantic-settings |
+| ORM | **SQLAlchemy 2.0** (declarative, `version_id_col` for optimistic locking) |
+| Migrations | **Alembic** |
+| Database | **MySQL 8.0** (InnoDB, utf8mb4, REPEATABLE READ) via PyMySQL |
+| Auth | **PyJWT** (HS256) + **bcrypt** via passlib |
+| Rate limiting | **slowapi** |
+| Logging | **structlog** |
+| Frontend | **Vue 3** + Vite + TypeScript, Pinia, Element Plus, ECharts |
+| Testing | **pytest** + pytest-asyncio + pytest-cov |
+| Lint / format / types | **Ruff**, **Black**, **mypy** |
+| Security scan | **bandit**, **pip-audit** |
+| CI / deploy | **GitHub Actions**, **Docker** + docker-compose |
+
+> ⚠️ **Known dependency traps** (already fixed here; do not reintroduce):
+> - Do **not** install `types-PyJWT` or `types-cryptography`. PyJWT ≥ 2.4 and
+>   cryptography both ship `py.typed` with correct inline annotations; the old
+>   stub packages shadow them with PyJWT-1.x-era signatures and make mypy report
+>   a false `jwt.encode() -> bytes` error at every call site.
+> - `pytest-asyncio` must be **1.x**, not 0.25.x. The older line calls the
+>   deprecated `asyncio.get_event_loop_policy()`, and since this suite runs with
+>   `filterwarnings = ["error"]`, that fails *every* test at setup on Python 3.12+.
+> - `httpx2` is required, not optional: starlette ≥ 1.7 imports it first and only
+>   falls back to `httpx` by emitting a `StarletteDeprecationWarning` — again an
+>   error under this configuration.
+> - `pydantic-settings` 2.15 no longer hard-depends on `python-dotenv`, but
+>   `src/common/config.py` reads `.env`, so it stays pinned in `requirements.txt`.
 
 ---
 
@@ -98,8 +136,49 @@ transactional consistency.
 └── .github/workflows/         # CI pipeline (runs on every pull request)
 ```
 
-> The directories currently contain only `.gitkeep` placeholders. Replace them with real code as
-> each module is developed.
+**What is already implemented** (the shared foundation — build on it, don't reinvent it):
+
+```
+src/common/config.py        Settings from env vars; refuses to boot production
+                            with a placeholder secret, weak DB password or
+                            wildcard CORS. Secrets are excluded from model_dump().
+src/common/security.py      bcrypt hashing, JWT sign/verify, Role enum, and the
+                            require_roles() / require_staff() guards.
+src/common/middleware.py    Request-id correlation, hardening headers, and the
+                            uniform {"error": {code, message, request_id}} body.
+src/common/audit.py         AuditLog table + record_audit() with automatic
+                            redaction of credential-like keys.
+src/data/database.py        Engine/session, lock_for_update() (SELECT … FOR UPDATE)
+                            and StaleDataError handling — the Objective (d) toolkit.
+src/presentation/api/main.py  App factory, /health, /api/v1/auth/me, OpenAPI docs.
+tests/unit/                 184 passing tests, 80.5% coverage of src/.
+deploy/docker/              Multi-stage Dockerfile + docker-compose with MySQL 8.0.
+```
+
+**What is still a placeholder** — each is owned by a named person in §6:
+
+| Path | Waiting for | Owner |
+|---|---|---|
+| `src/application/reservation/` | booking service, seat holds, state machine | KEYING CHEN |
+| `src/application/ordering/` | menu browsing, order submission | ZIHAN ZHU |
+| `src/application/membership/` | registration/login, points, tiers, coupons | RONG CONG, GEMAN MENG |
+| `src/application/review/` | order-verified reviews, Bayesian ranking, moderation | RUNYI PENG |
+| `src/application/analytics/` | dashboard aggregates, hybrid recommender | HUANPAI LI |
+| `src/data/schema/` | the ORM models for every table | YUANYUAN XUE |
+| `src/presentation/{web,staff,manager}/` | the three Vue SPAs | module owners |
+| `tests/integration/`, `tests/concurrency/` | DB-backed tests; the concurrent-booking test | GEMAN MENG, JIAYI TAN |
+| `docs/{requirements,testing,user-manual}/` | requirements, test report, user manual | per §6 |
+
+`src/presentation/api/main.py` registers module routers by convention: create a
+`router` object in `src/application/<module>/router.py` and it is mounted at
+`/api/v1/<module>` automatically. Missing modules are skipped with a debug log,
+so a half-finished module cannot break the app for everyone else.
+
+Read **[docs/design/ARCHITECTURE.md](docs/design/ARCHITECTURE.md)** before writing
+code. It documents the dependency rule (which tier may import what), the booking
+critical section's three-layer defence, the reservation state machine, the data
+model, the shared boundaries that cause merge conflicts, and 8 open questions
+that still need a group decision.
 
 ---
 
@@ -143,7 +222,7 @@ See **[CONTRIBUTING.md](CONTRIBUTING.md)** for the full workflow. In short:
 5. Push your branch and open a **Pull Request**. CI runs automatically.
 6. Get at least one approving review, then merge with **Squash and merge**.
 
-**Never push directly to `main`.** `main` is protected and always deployable.
+**Never push directly to `main`.** `main` must stay deployable at every commit.
 
 ---
 
@@ -155,5 +234,43 @@ cd bmis-group4-restaurant-system
 git checkout -b feature/your-module
 ```
 
-Detailed setup instructions (database, dependencies, Docker) will be added to
-[`docs/user-manual/`](docs/user-manual/) as the prototype takes shape.
+Then set up the backend:
+
+```bash
+python -m venv .venv
+# Windows PowerShell:  .\.venv\Scripts\Activate.ps1
+# macOS / Linux:       source .venv/bin/activate
+pip install -r requirements.txt -r requirements-dev.txt
+
+cp .env.example .env        # then generate your own secret — see the file
+python -c "import secrets; print(secrets.token_urlsafe(48))"
+
+pytest                      # 184 unit tests, no database needed
+ruff check src tests && black --check src tests && mypy src
+```
+
+Unit tests need no database. Anything under `tests/integration/` and
+`tests/concurrency/` skips itself unless `APP_DB_HOST` is set — point it at a
+scratch database, never one with data you care about.
+
+To run the whole stack (MySQL 8.0 + the API) in one command:
+
+```bash
+docker compose -f deploy/docker/docker-compose.yml up --build
+```
+
+> **Windows users whose `pip install` appears to hang:** direct access to
+> `pypi.org` can be extremely slow on some networks. Use a mirror instead —
+> `pip install -i https://mirrors.aliyun.com/pypi/simple/ -r requirements.txt`.
+
+The REST API documentation deliverable is generated from the running app:
+
+```bash
+python scripts/export_openapi.py --output docs/api/openapi.json
+```
+
+Re-run that after any change to a route, and commit the result — the archived
+`openapi.json` is what reviewers read when they cannot start the app.
+
+Module-level setup details (per-module environment variables, seeding data) will
+be added to [`docs/user-manual/`](docs/user-manual/) as the prototype takes shape.

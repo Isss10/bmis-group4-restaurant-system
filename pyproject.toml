@@ -1,0 +1,195 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "restaurant-system"
+version = "0.1.0"
+description = "Restaurant reservation and food-ordering system — JC2001 BMIS Group 4"
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+
+# ---------------------------------------------------------------------------
+# Ruff — linting (runs in CI, see .github/workflows/ci.yml)
+# ---------------------------------------------------------------------------
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+# src layout is NOT used: our package root is src/ itself, so tell Ruff where
+# first-party code lives for correct import sorting.
+src = ["src", "tests"]
+extend-exclude = ["alembic_env_backup", "docs"]
+
+[tool.ruff.lint]
+# A deliberately strict-but-achievable rule set for a ten-person student team.
+select = [
+  "E",    # pycodestyle errors
+  "W",    # pycodestyle warnings
+  "F",    # pyflakes: unused imports/variables, undefined names
+  "I",    # isort: import ordering
+  "B",    # flake8-bugbear: common Python gotchas
+  "C4",   # flake8-comprehensions
+  "UP",   # pyupgrade: modernise syntax for the target Python version
+  "S",    # flake8-bandit: security issues (OWASP hardening, Objective f)
+  "A",    # flake8-builtins: shadowing builtin names
+  "RET",  # flake8-return: return-value consistency
+  "SIM",  # flake8-simplify
+  "PTH",  # flake8-use-pathlib
+  "RUF",  # Ruff's own rules
+]
+ignore = [
+  # Docstring rules are not enforced at this stage; the user manual and
+  # technical report carry the documentation burden instead.
+  "D",
+  # S101 flags every `assert`. Pytest tests legitimately use assert, and the
+  # per-file ignore below scopes that to tests only rather than disabling it
+  # project-wide — assert in production code is still a real bug.
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests use assert, bare fixtures and long literal tables; that is idiomatic.
+"tests/**" = ["S101", "S105", "S106", "PLR2004"]
+# Alembic migrations are generated code with their own conventions.
+"src/data/migration/versions/**" = ["E501", "B008"]
+# __init__.py files legitimately re-export names.
+"__init__.py" = ["F401"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["src"]
+
+[tool.ruff.format]
+# Ruff's formatter is Black-compatible. We still pin `black` in CI because the
+# team's style guide names it explicitly, but let Ruff format in editors to
+# avoid two competing formatters.
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+
+# ---------------------------------------------------------------------------
+# Black — formatting (CI runs `black --check`)
+# ---------------------------------------------------------------------------
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+extend-exclude = '''
+/(
+  \.git
+  | \.venv
+  | src/data/migration/versions
+)/
+'''
+
+# ---------------------------------------------------------------------------
+# mypy — static typing (CI runs `mypy src`)
+# ---------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.11"
+files = ["src"]
+# `src/` deliberately has no __init__.py — it is imported as an implicit
+# namespace package (`import src.common.config`) while its subpackages do have
+# __init__.py. Without these two settings mypy resolves the same file under two
+# different module names ("common.config" AND "src.common.config") and aborts
+# with "Source file found twice under different module names" before checking
+# anything. explicit_package_bases + mypy_path pin the package root to the
+# repository root, so every module is named src.* consistently and matches the
+# imports the tests use.
+namespace_packages = true
+explicit_package_bases = true
+mypy_path = "."
+# Gradual adoption: start non-strict so the team can add types module by module
+# without CI blocking every PR on day one. Tighten before final submission.
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_return_any = true
+no_implicit_optional = true
+check_untyped_defs = true
+disallow_incomplete_defs = true
+disallow_untyped_decorators = true
+ignore_missing_imports = true
+show_error_codes = true
+pretty = true
+# Generated Alembic migrations are machine-written and follow their own
+# conventions (module-level `revision`/`down_revision` strings, `op.*` calls).
+# Excluded via `exclude` rather than a `[[tool.mypy.overrides]]` section:
+# an override matching zero files makes mypy emit "unused section(s)", and
+# the versions/ directory is legitimately empty until the first migration
+# is authored.
+exclude = ['^src/data/migration/versions/']
+
+# ---------------------------------------------------------------------------
+# pytest — test configuration
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Make `import src...` resolve from the repository root. Without this, pytest
+# only adds the tests/ directory to sys.path and every import of the application
+# package fails with ModuleNotFoundError.
+pythonpath = ["."]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+  "-ra",
+  "--strict-markers",
+  "--strict-config",
+  "--tb=short",
+]
+asyncio_mode = "auto"
+markers = [
+  "unit: fast isolated tests with no external dependencies",
+  "integration: tests that need a database or the full app",
+  "concurrency: tests that verify behaviour under parallel load (Objective d)",
+  "slow: tests that take more than a few seconds",
+]
+filterwarnings = [
+  "error",
+  # Upstream deprecations we cannot fix ourselves — list them explicitly
+  # rather than silencing all warnings.
+  "ignore::DeprecationWarning:passlib.*",
+]
+
+# ---------------------------------------------------------------------------
+# coverage — coverage reports (Objective f)
+# ---------------------------------------------------------------------------
+[tool.coverage.run]
+source = ["src"]
+branch = true
+omit = [
+  "*/migration/versions/*",
+  "*/__init__.py",
+]
+parallel = true
+
+[tool.coverage.paths]
+source = ["src"]
+
+[tool.coverage.report]
+precision = 1
+show_missing = true
+skip_covered = false
+# Non-blocking informational floor. Raise `fail_under` before final submission
+# once the modules are implemented — see docs/testing/.
+fail_under = 0
+exclude_lines = [
+  "pragma: no cover",
+  "raise NotImplementedError",
+  "if TYPE_CHECKING:",
+  "if __name__ == .__main__.:",
+]
+
+[tool.coverage.html]
+directory = "coverage/htmlcov"
+
+[tool.coverage.xml]
+output = "coverage/coverage.xml"
+
+# ---------------------------------------------------------------------------
+# bandit — security scanning (OWASP Top 10 hardening, Objective f)
+# ---------------------------------------------------------------------------
+[tool.bandit]
+exclude_dirs = ["tests", ".venv", "src/data/migration/versions"]
+skips = [
+  # B101 flags assert; tests use assert legitimately. Production code must not.
+  "B101",
+]

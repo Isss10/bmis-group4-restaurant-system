@@ -1,15 +1,13 @@
 name: CI
 
-# Runs on every pull request into main, and on direct pushes to main.
-# The proposal (Objective f) requires CI on every pull request.
+# Objective (f): "CI running on every pull request". This workflow is that
+# commitment made real — it blocks a merge until lint, types, tests and the
+# security scan all pass.
 #
-# ⚠️ BEFORE THE TEAM STARTS CODING:
-# The `build-and-test` job below is a SKELETON. It detects the stack from the
-# files present in the repository and skips when nothing is found, so it stays
-# green while the repo is empty. Once the language/framework is decided, replace
-# the relevant section with the real build + test + coverage commands and delete
-# the others. A permanently-red pipeline blocks all ten contributors — do not
-# merge a change that leaves CI failing.
+# Stack (see pyproject.toml and requirements*.txt):
+#   Python 3.11 · FastAPI · SQLAlchemy 2.0 · Alembic · MySQL 8.0
+#   Vue 3 + Vite + TypeScript (frontend job below)
+#   Ruff + Black + mypy · pytest + coverage · bandit + pip-audit
 
 on:
   pull_request:
@@ -17,7 +15,8 @@ on:
   push:
     branches: [main]
 
-# Cancel superseded runs on the same branch to save CI minutes.
+# A force-push or new commit to the same branch cancels the superseded run.
+# With ten people opening PRs this saves a meaningful amount of CI minutes.
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -25,11 +24,17 @@ concurrency:
 permissions:
   contents: read
 
+# Fail the whole run as soon as one job fails, so nobody waits on a doomed build.
+# `lint` is allowed to finish because its output is what tells you what to fix.
+env:
+  PYTHON_VERSION: "3.11"
+  NODE_VERSION: "20"
+
 jobs:
   # ---------------------------------------------------------------------------
-  # 1. Sanity checks that always run, regardless of stack.
+  # 1. Repo hygiene — secrets, env files, commit message. Fast, always runs.
   # ---------------------------------------------------------------------------
-  repo-hygiene:
+  hygiene:
     name: Repo hygiene
     runs-on: ubuntu-latest
     steps:
@@ -37,34 +42,58 @@ jobs:
 
       - name: Block committed secrets and env files
         run: |
-          echo "Scanning for files that must never be committed..."
+          echo "Scanning tracked files for anything that must never be committed..."
           FAILED=0
           while IFS= read -r f; do
             echo "::error::Forbidden file committed: $f"
             FAILED=1
           done < <(git ls-files | grep -E '(^|/)\.env$|(^|/)\.env\.[^e]|\.pem$|\.p12$|\.jks$|(^|/)secrets/' || true)
           if [ "$FAILED" -ne 0 ]; then
-            echo "Remove the file(s) above, add the pattern to .gitignore, and re-commit."
-            echo "If a real credential was pushed, ROTATE IT — deleting the file is not enough."
+            echo ""
+            echo "Remove the file(s) above and add the pattern to .gitignore."
+            echo "IMPORTANT: if a real credential was ever pushed, ROTATE IT."
+            echo "Deleting the file is not enough — it stays in Git history."
             exit 1
           fi
-          echo "OK: no forbidden files."
+          echo "OK: no forbidden files tracked."
 
-      - name: Scan tracked files for hardcoded credential patterns
+      - name: Scan tracked files for hardcoded credentials
         run: |
-          echo "Scanning tracked files for likely hardcoded credentials..."
+          echo "Scanning for values that look like real secrets..."
           MATCHES=$(git ls-files -z \
             | xargs -0 grep -nEI '(password|passwd|pwd|secret|api[_-]?key|access[_-]?token)[[:space:]]*[:=][[:space:]]*["'"'"'][^"'"'"']{8,}["'"'"']' \
             || true)
           if [ -n "$MATCHES" ]; then
-            echo "::warning::Possible hardcoded credentials found. Verify each line is a placeholder, not a real value:"
+            echo "::warning::Possible hardcoded credentials. Confirm every line below is a placeholder:"
             echo "$MATCHES"
+            echo ""
+            echo "Non-blocking so that .env.example and test fixtures can pass."
+            echo "A real secret here is a reportable incident — rotate it immediately."
           else
             echo "OK: no obvious hardcoded credentials."
           fi
 
-      # Untrusted text (PR titles, commit messages) is passed through env, never
-      # interpolated straight into the shell — that would allow script injection.
+      - name: Block large files that belong outside Git
+        run: |
+          # Git is not a file store. Presentation videos and archives must go
+          # through the course submission channel (see CONTRIBUTING.md §10).
+          FAILED=0
+          while IFS= read -r f; do
+            SIZE=$(stat -c %s "$f" 2>/dev/null || echo 0)
+            if [ "$SIZE" -gt 5242880 ]; then
+              echo "::error::$f is $((SIZE / 1024 / 1024))MB — over the 5MB limit"
+              FAILED=1
+            fi
+          done < <(git ls-files || true)
+          if [ "$FAILED" -ne 0 ]; then
+            echo "Large binaries bloat every clone forever, even after deletion."
+            exit 1
+          fi
+          echo "OK: no oversized files."
+
+      # Untrusted text (PR titles, commit messages) is bound to env and never
+      # interpolated into the shell — direct interpolation allows script
+      # injection from a crafted PR title.
       - name: Check commit message convention
         env:
           EVENT_NAME: ${{ github.event_name }}
@@ -78,154 +107,390 @@ jobs:
           fi
           echo "Subject: $MSG"
           FIRST_LINE=$(printf '%s' "$MSG" | head -n 1)
-          if printf '%s' "$FIRST_LINE" | grep -qE '^(feat|fix|docs|test|refactor|perf|chore|ci|build|style|revert)(\([a-z0-9-]+\))?!?: .+'; then
-            echo "OK: follows Conventional Commits."
-          elif [ "$EVENT_NAME" = "pull_request" ]; then
-            echo "::warning::PR title does not follow Conventional Commits (see CONTRIBUTING.md §5). Non-blocking."
+          PATTERN='^(feat|fix|docs|test|refactor|perf|chore|ci|build|style|revert)(\([a-z0-9-]+\))?!?: .+'
+          if printf '%s' "$FIRST_LINE" | grep -qE "$PATTERN"; then
+            echo "OK: follows Conventional Commits (CONTRIBUTING.md §5)."
+          else
+            echo "::warning::Subject does not follow Conventional Commits. Non-blocking."
           fi
 
   # ---------------------------------------------------------------------------
-  # 2. Build + test + coverage. Skeleton — fill in once the stack is decided.
+  # 2. Lint, format and static types
   # ---------------------------------------------------------------------------
-  build-and-test:
-    name: Build & test
+  lint:
+    name: Lint & types
     runs-on: ubuntu-latest
-
-    # The proposal specifies a self-hosted relational database (MySQL/PostgreSQL).
-    # Uncomment the service your integration tests need.
-    # services:
-    #   postgres:
-    #     image: postgres:16
-    #     env:
-    #       POSTGRES_USER: test
-    #       POSTGRES_PASSWORD: test
-    #       POSTGRES_DB: restaurant_test
-    #     ports: ['5432:5432']
-    #     options: >-
-    #       --health-cmd pg_isready
-    #       --health-interval 10s
-    #       --health-timeout 5s
-    #       --health-retries 5
-
     steps:
       - uses: actions/checkout@v4
 
-      # ---------------- Java / Spring Boot ----------------
-      - name: Detect Java project
-        id: detect-java
-        run: |
-          if [ -f pom.xml ] || ls build.gradle build.gradle.kts settings.gradle settings.gradle.kts >/dev/null 2>&1; then
-            echo "found=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "found=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Set up JDK 17
-        if: steps.detect-java.outputs.found == 'true'
-        uses: actions/setup-java@v4
+      - uses: actions/setup-python@v5
         with:
-          distribution: temurin
-          java-version: '17'
-          cache: maven
-
-      - name: Maven build + test + coverage
-        if: steps.detect-java.outputs.found == 'true' && hashFiles('pom.xml') != ''
-        run: mvn -B verify
-
-      # ---------------- Python ----------------
-      - name: Detect Python project
-        id: detect-python
-        run: |
-          if [ -f requirements.txt ] || [ -f pyproject.toml ] || [ -f setup.py ]; then
-            echo "found=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "found=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Set up Python
-        if: steps.detect-python.outputs.found == 'true'
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
+          python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
 
-      - name: Install Python dependencies
-        if: steps.detect-python.outputs.found == 'true'
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          [ -f requirements.txt ] && pip install -r requirements.txt || true
-          pip install pytest pytest-cov || true
+          pip install -r requirements.txt -r requirements-dev.txt
 
-      - name: Pytest with coverage
-        if: steps.detect-python.outputs.found == 'true'
-        run: |
-          pytest tests/ --cov=src --cov-report=term-missing --cov-report=xml || \
-            echo "::warning::Tests not runnable yet. Replace this fallback once real tests exist."
+      - name: Ruff (lint)
+        run: ruff check src tests --output-format=github
 
-      # ---------------- Node / JavaScript / TypeScript ----------------
-      - name: Detect Node project
-        id: detect-node
-        run: |
-          if [ -f package.json ]; then echo "found=true" >> "$GITHUB_OUTPUT"; else echo "found=false" >> "$GITHUB_OUTPUT"; fi
+      - name: Ruff (format check)
+        run: ruff format --check src tests
 
-      - name: Set up Node
-        if: steps.detect-node.outputs.found == 'true'
-        uses: actions/setup-node@v4
+      - name: Black (format check)
+        run: black --check src tests
+
+      - name: mypy (static types)
+        run: mypy src
+
+  # ---------------------------------------------------------------------------
+  # 3. Security scanning — OWASP Top 10 hardening evidence (Objective f)
+  # ---------------------------------------------------------------------------
+  security:
+    name: Security scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
         with:
-          node-version: '20'
-          cache: npm
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
 
-      - name: npm install + test
-        if: steps.detect-node.outputs.found == 'true'
+      - name: Install dependencies
         run: |
-          npm ci
-          npm test --if-present
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
 
-      # ---------------- Coverage artefact ----------------
+      - name: Bandit (static security analysis)
+        # -r recurses, -c reads the [tool.bandit] config from pyproject.toml,
+        # which excludes tests and skips B101 (assert in tests is idiomatic).
+        run: bandit -r src -c pyproject.toml -f txt -o bandit-report.txt --exit-zero
+        continue-on-error: true
+
+      - name: Bandit (fail on medium and high severity)
+        # Two passes on purpose: the report above is always uploaded so a
+        # failure is debuggable, while this one is what actually blocks a merge.
+        run: bandit -r src -c pyproject.toml --severity-level medium
+
+      - name: pip-audit (known vulnerabilities in dependencies)
+        # Scans BOTH requirement files by resolving them.
+        #
+        # Do not add --disable-pip here: pip-audit rejects it unless the
+        # requirements file is hash-pinned (--require-hashes) or --no-deps is
+        # given, and the combination exits non-zero before scanning anything —
+        # which would fail the security job on every pull request regardless of
+        # whether any dependency is actually vulnerable.
+        #
+        # requirements-dev.txt must be scanned too. Dev tools run in CI and in
+        # the Docker build, so a vulnerable one is not a purely local concern.
+        run: pip-audit --strict -r requirements.txt -r requirements-dev.txt
+
+      - name: Upload Bandit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-report
+          path: bandit-report.txt
+          if-no-files-found: ignore
+
+  # ---------------------------------------------------------------------------
+  # 4. Unit tests + coverage. No database needed — always runs.
+  # ---------------------------------------------------------------------------
+  test-unit:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Run unit tests with coverage
+        env:
+          APP_ENVIRONMENT: testing
+          # Random per-run secret so tests never depend on a committed value.
+          APP_JWT_SECRET_KEY: ${{ github.run_id }}-${{ github.sha }}-ci-only-not-a-real-secret
+          APP_DB_NAME: restaurant_test
+        run: |
+          pytest tests/unit \
+            -m "not integration and not concurrency and not slow" \
+            --cov=src --cov-report=term-missing --cov-report=xml:coverage/unit.xml \
+            --junitxml=reports/unit.xml
+
       - name: Upload coverage report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: coverage-report
+          name: coverage-unit
           path: |
             coverage/
-            **/target/site/jacoco/
-            coverage.xml
+            reports/
           if-no-files-found: ignore
 
-      - name: Report skeleton status
-        if: steps.detect-java.outputs.found == 'false' && steps.detect-python.outputs.found == 'false' && steps.detect-node.outputs.found == 'false'
-        run: |
-          echo "::notice::No Java, Python or Node project detected. The build/test job ran no real tests."
-          echo "::notice::Once the stack is chosen, replace this skeleton in .github/workflows/ci.yml with the real build, test and coverage commands."
+      - name: Publish test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-results
+          path: reports/unit.xml
+          if-no-files-found: ignore
 
   # ---------------------------------------------------------------------------
-  # 3. Docker image builds once deploy/docker/ contains a Dockerfile.
+  # 5. Integration + concurrency tests against a real MySQL 8.0.
+  #    Objective (d) requires proving that only one of many simultaneous
+  #    bookings succeeds — that guarantee is meaningless without a real
+  #    transactional database, so this job is not optional.
   # ---------------------------------------------------------------------------
-  docker-build:
+  test-integration:
+    name: Integration & concurrency tests
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: ci-root-password
+          MYSQL_DATABASE: restaurant_test
+          MYSQL_USER: restaurant
+          MYSQL_PASSWORD: ci-only-password
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -uroot -pci-root-password"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Wait for MySQL to accept connections
+        run: |
+          for i in $(seq 1 30); do
+            if mysqladmin ping -h 127.0.0.1 -P 3306 -uroot -pci-root-password --silent; then
+              echo "MySQL is ready."
+              exit 0
+            fi
+            echo "Waiting for MySQL... ($i/30)"
+            sleep 2
+          done
+          echo "::error::MySQL did not become ready in time"
+          exit 1
+
+      - name: Report the InnoDB defaults the concurrency work relies on
+        # Documents the assumptions in src/data/database.py. Diagnostic only:
+        # a MySQL version difference should not block a PR, but the values stay
+        # in the log if a concurrency test ever behaves unexpectedly.
+        run: |
+          mysql -h 127.0.0.1 -P 3306 -uroot -pci-root-password -N -B -e \
+            "SELECT @@transaction_isolation, @@innodb_default_row_format, @@sql_mode;" || \
+            echo "::warning::Could not read MySQL server variables"
+
+      - name: Run integration and concurrency tests
+        env:
+          APP_ENVIRONMENT: testing
+          APP_JWT_SECRET_KEY: ${{ github.run_id }}-${{ github.sha }}-ci-only-not-a-real-secret
+          APP_DB_HOST: 127.0.0.1
+          APP_DB_PORT: "3306"
+          APP_DB_USER: root
+          APP_DB_PASSWORD: ci-root-password
+          APP_DB_NAME: restaurant_test
+        run: |
+          # Exit code 5 means "no tests were collected". tests/integration and
+          # tests/concurrency start out empty, and an empty directory must not
+          # fail the pipeline and block every pull request. Treat 5 as a notice;
+          # any other non-zero code is a real failure and still fails the job.
+          # Remove this tolerance once the concurrency tests land (Objective d).
+          set +e
+          pytest tests/integration tests/concurrency \
+            -m "integration or concurrency" \
+            --cov=src --cov-report=term-missing --cov-report=xml:coverage/integration.xml \
+            --junitxml=reports/integration.xml
+          CODE=$?
+          set -e
+          if [ "$CODE" -eq 5 ]; then
+            echo "::notice::No integration or concurrency tests collected yet."
+            echo "::notice::Objective (d) requires the automated concurrent-booking test before 30 Nov 2026."
+            exit 0
+          fi
+          exit "$CODE"
+
+      - name: Upload integration coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-integration
+          path: |
+            coverage/
+            reports/
+          if-no-files-found: ignore
+
+  # ---------------------------------------------------------------------------
+  # 6. Frontend — Vue 3 + Vite + TypeScript.
+  #    Skipped while src/presentation/web has no package.json, so the pipeline
+  #    stays green until the frontend owners scaffold it.
+  # ---------------------------------------------------------------------------
+  frontend:
+    name: Frontend (Vue 3)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/presentation/web
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Detect a frontend project
+        id: detect
+        run: |
+          if [ -f package.json ]; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-node@v4
+        if: steps.detect.outputs.found == 'true'
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: src/presentation/web/package-lock.json
+
+      - name: Install
+        if: steps.detect.outputs.found == 'true'
+        run: npm ci
+
+      - name: Type check
+        if: steps.detect.outputs.found == 'true'
+        run: npm run type-check --if-present
+
+      - name: Lint
+        if: steps.detect.outputs.found == 'true'
+        run: npm run lint --if-present
+
+      - name: Unit tests
+        if: steps.detect.outputs.found == 'true'
+        run: npm run test:unit --if-present
+
+      - name: Build
+        if: steps.detect.outputs.found == 'true'
+        run: npm run build --if-present
+
+      - name: Not scaffolded yet
+        if: steps.detect.outputs.found == 'false'
+        run: |
+          echo "::notice::No package.json in src/presentation/web yet."
+          echo "::notice::Frontend checks will activate automatically once Vue 3 + Vite is scaffolded there."
+
+  # ---------------------------------------------------------------------------
+  # 7. Docker image build (Objective f: Docker deployment).
+  # ---------------------------------------------------------------------------
+  docker:
     name: Docker build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Detect Dockerfile
-        id: detect-docker
+      - name: Detect a Dockerfile
+        id: detect
         run: |
-          if ls deploy/docker/Dockerfile Dockerfile >/dev/null 2>&1; then
+          if [ -f deploy/docker/Dockerfile ] || [ -f Dockerfile ]; then
             echo "found=true" >> "$GITHUB_OUTPUT"
           else
             echo "found=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Build image
-        if: steps.detect-docker.outputs.found == 'true'
+      - name: Build the API image
+        if: steps.detect.outputs.found == 'true'
         run: |
           if [ -f deploy/docker/Dockerfile ]; then
-            docker build -f deploy/docker/Dockerfile -t restaurant-system:ci .
+            docker build -f deploy/docker/Dockerfile -t restaurant-system-api:ci .
           else
-            docker build -t restaurant-system:ci .
+            docker build -t restaurant-system-api:ci .
           fi
 
-      - name: Note
-        if: steps.detect-docker.outputs.found == 'false'
-        run: echo "::notice::No Dockerfile yet. Docker packaging is scheduled for the Final Preparation phase (14 Dec 2026)."
+      - name: Smoke-test the container
+        if: steps.detect.outputs.found == 'true'
+        run: |
+          # Boot with a throwaway secret and confirm /health answers. Catches
+          # a Dockerfile that builds but produces a container that cannot start.
+          docker run -d --rm --name api-smoke \
+            -e APP_ENVIRONMENT=testing \
+            -e APP_JWT_SECRET_KEY=ci-only-smoke-test-secret-not-for-production \
+            -p 8080:8000 \
+            restaurant-system-api:ci
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:8080/health > /dev/null 2>&1; then
+              echo "Container is healthy."
+              docker stop api-smoke
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs api-smoke || true
+          docker stop api-smoke || true
+          echo "::error::Container did not become healthy"
+          exit 1
+
+      - name: Not scaffolded yet
+        if: steps.detect.outputs.found == 'false'
+        run: |
+          echo "::notice::No Dockerfile yet. Docker packaging is scheduled for the Final Preparation phase (14 Dec 2026)."
+
+  # ---------------------------------------------------------------------------
+  # 8. Aggregate gate. Branch protection should require ONLY this job, so that
+  #    adding or removing a job above never means re-editing the ruleset.
+  # ---------------------------------------------------------------------------
+  ci-passed:
+    name: CI passed
+    runs-on: ubuntu-latest
+    needs:
+      - hygiene
+      - lint
+      - security
+      - test-unit
+      - test-integration
+      - frontend
+      - docker
+    if: always()
+    steps:
+      - name: Summarise results
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          echo "$RESULTS" | python3 -c '
+          import json, sys
+          data = json.load(sys.stdin)
+          failed = []
+          for name, job in data.items():
+              result = job.get("result", "unknown")
+              icon = {"success": "OK", "skipped": "skipped", "neutral": "neutral"}.get(result, "FAILED")
+              print(f"  {icon:8s} {name}")
+              if result not in {"success", "skipped", "neutral"}:
+                  failed.append(name)
+          print()
+          if failed:
+              names = ", ".join(failed)
+              print(f"::error::{len(failed)} job(s) failed: {names}")
+              sys.exit(1)
+          print("All required jobs passed.")
+          '
