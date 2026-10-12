@@ -129,15 +129,11 @@ def _build_engine(settings: Settings) -> Engine:
         """
         try:
             with dbapi_connection.cursor() as cursor:
-                cursor.execute(
-                    "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ"
-                )
+                cursor.execute("SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ")
                 cursor.execute("SET SESSION sql_mode='STRICT_TRANS_TABLES'")
             dbapi_connection.autocommit = False
         except Exception:  # non-MySQL backends (tests) lack these
-            logger.debug(
-                "Could not set MySQL session variables; continuing", exc_info=True
-            )
+            logger.debug("Could not set MySQL session variables; continuing", exc_info=True)
 
     return engine
 

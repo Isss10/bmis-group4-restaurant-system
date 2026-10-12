@@ -16,7 +16,9 @@ class Review(Base, TimestampMixin):
     rating: Mapped[int] = mapped_column(Integer, nullable=False)
     content: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    moderation = relationship("ReviewModeration", back_populates="review", uselist=False)
+    moderation: Mapped["ReviewModeration | None"] = relationship(
+        "ReviewModeration", back_populates="review", uselist=False
+    )
 
 
 class ReviewModeration(Base, TimestampMixin):
@@ -31,7 +33,7 @@ class ReviewModeration(Base, TimestampMixin):
     moderated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     reason: Mapped[str | None] = mapped_column(String(200), nullable=True)
 
-    review = relationship("Review", back_populates="moderation")
+    review: Mapped["Review"] = relationship("Review", back_populates="moderation")
 
 
 class DishRatingStats(Base, TimestampMixin):

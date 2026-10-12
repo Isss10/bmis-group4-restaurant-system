@@ -13,8 +13,6 @@ Set the environment before importing application code, otherwise
 configuration.
 """
 
-from src.data.schema.review import Review, ReviewModeration, DishRatingStats
-
 from __future__ import annotations
 
 import os
