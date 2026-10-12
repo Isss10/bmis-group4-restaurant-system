@@ -1,8 +1,6 @@
 class StaffService:
-
     def __init__(self, repository):
         self.repository = repository
-
 
     def get_reservations(self):
         """
@@ -10,17 +8,11 @@ class StaffService:
         """
         pass
 
-
-    def update_reservation_status(
-        self,
-        reservation_id,
-        status
-    ):
+    def update_reservation_status(self, reservation_id, status):
         """
         Update reservation status.
         """
         pass
-
 
     def get_orders(self):
         """
@@ -28,12 +20,7 @@ class StaffService:
         """
         pass
 
-
-    def update_order_status(
-        self,
-        order_id,
-        status
-    ):
+    def update_order_status(self, order_id, status):
         """
         Update order status.
         """
