@@ -1,7 +1,5 @@
 """Shared pytest fixtures.
 
-from src.data.schema.review import Review, ReviewModeration, DishRatingStats
-
 Tests must never need a real MySQL server to run — CI would become slow and
 flaky, and contributors would skip running tests locally. The split is:
 
@@ -14,6 +12,8 @@ Set the environment before importing application code, otherwise
 `get_settings()` caches development values and every test reads the wrong
 configuration.
 """
+
+from src.data.schema.review import Review, ReviewModeration, DishRatingStats
 
 from __future__ import annotations
 
