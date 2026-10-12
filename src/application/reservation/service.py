@@ -9,12 +9,8 @@ class ReservationService:
         self.hold_duration_minutes = 15
 
     def create_reservation(
-        self,
-        table_id: str,
-        customer_name: str,
-        start_time: datetime,
-        end_time: datetime
-        ) -> Reservation:
+        self, table_id: str, customer_name: str, start_time: datetime, end_time: datetime
+    ) -> Reservation:
         existing_reservations = self.repository.get_by_table(table_id)
         for res in existing_reservations:
             if res.status in [ReservationStatus.HELD, ReservationStatus.CONFIRMED]:
@@ -26,7 +22,7 @@ class ReservationService:
                 if start_time < res.end_time and end_time > res.start_time:
                     raise ValueError(
                         f"Table {table_id} is already booked or held during this time slot."
-                        )
+                    )
 
         now = datetime.now()
         expires_at = now + timedelta(minutes=self.hold_duration_minutes)
@@ -37,7 +33,7 @@ class ReservationService:
             start_time=start_time,
             end_time=end_time,
             status=ReservationStatus.HELD,
-            expires_at=expires_at
+            expires_at=expires_at,
         )
         return self.repository.save(reservation)
 
