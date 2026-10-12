@@ -230,7 +230,7 @@ aggregate endpoints or database views that M2/M5 provide (manual §4.6).
 | NFR-04 | **Security (OWASP Top 10)**: parameterised queries only; bcrypt cost ≥ 12; secrets from environment only; production refuses placeholder secrets and wildcard CORS; `/docs` disabled in production; rate limiting on review submission; non-root container. | bandit + pip-audit in CI; manual §10 mapping in ARCHITECTURE.md |
 | NFR-05 | **Auditability**: audit rows are append-only and survive application restart; credential-like keys are redacted before storage. | `tests/unit/test_audit.py` |
 | NFR-06 | **Deployability**: `docker compose up --build` starts MySQL 8 + API; `/health` returns 200; migrations apply automatically on start. | CI docker job smoke test |
-| NFR-07 | **Data**: MySQL 8 InnoDB, `utf8mb4`, REPEATABLE READ; all schema changes via Alembic migrations that are reversible (`downgrade` written). | manual §5.2 |
+| NFR-07 | **Data**: MySQL 8 InnoDB, `utf8mb4`, isolation level explicitly **READ COMMITTED** (set per session *and* at the server level, not left to MySQL's default); all schema changes via Alembic migrations that are reversible (`downgrade` written). | manual §5.2 (migrations), §5.3 (isolation level + the three-layer booking defence) |
 | NFR-08 | **Documentation**: REST API documented via OpenAPI; user manual covers all five modules including installation. | `docs/api/`, `docs/user-manual/` |
 | NFR-09 | **Performance (bounded)**: list endpoints paginate (`page_size` ≤ 100, code `10002` above); dashboard reads aggregates, not raw tables, on the hot path. | manual §4.2 |
 
