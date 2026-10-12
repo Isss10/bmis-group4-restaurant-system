@@ -24,8 +24,8 @@ class ReviewModeration(Base, TimestampMixin):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     review_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("reviews.id"), nullable=False, unique=True
-    )
+    Integer, ForeignKey("reviews.id"), nullable=False, unique=True
+)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
     moderated_by: Mapped[int | None] = mapped_column(Integer, nullable=True)
     moderated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
