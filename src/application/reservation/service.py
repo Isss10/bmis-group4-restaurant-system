@@ -6,7 +6,7 @@ from models import Reservation, ReservationStatus
 class ReservationService:
     def __init__(self, repository):
         self.repository = repository
-        self.hold_duration_minutes = 15 
+        self.hold_duration_minutes = 15
 
     def create_reservation(
         self,
