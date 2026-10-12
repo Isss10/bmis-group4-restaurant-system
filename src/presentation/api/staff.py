@@ -28,7 +28,7 @@ def get_orders()-> dict:
 
 
 @router.patch("/orders/{order_id}")
-def update_order_status(order_id: int):
+def update_order_status(order_id: int)-> dict:
     """
     Update order status.
     """
