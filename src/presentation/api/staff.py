@@ -4,7 +4,7 @@ router = APIRouter(prefix="/staff", tags=["Staff"])
 
 
 @router.get("/reservations")
-def get_reservations():
+def get_reservations()-> dict:
     """
     Get all reservations for staff.
     """
@@ -12,7 +12,7 @@ def get_reservations():
 
 
 @router.patch("/reservations/{reservation_id}")
-def update_reservation_status(reservation_id: int):
+def update_reservation_status(reservation_id: int)-> dict:
     """
     Update reservation status.
     """
@@ -20,7 +20,7 @@ def update_reservation_status(reservation_id: int):
 
 
 @router.get("/orders")
-def get_orders():
+def get_orders()-> dict:
     """
     Get customer orders.
     """
