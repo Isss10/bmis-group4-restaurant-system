@@ -1,5 +1,7 @@
 """Shared pytest fixtures.
 
+from src.data.schema.review import Review, ReviewModeration, DishRatingStats
+
 Tests must never need a real MySQL server to run — CI would become slow and
 flaky, and contributors would skip running tests locally. The split is:
 
