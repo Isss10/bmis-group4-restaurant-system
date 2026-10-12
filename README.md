@@ -73,7 +73,7 @@ CI, the Dockerfile and every module's imports depend on it.
 | Validation | **Pydantic v2** + pydantic-settings |
 | ORM | **SQLAlchemy 2.0** (declarative, `version_id_col` for optimistic locking) |
 | Migrations | **Alembic** |
-| Database | **MySQL 8.0** (InnoDB, utf8mb4, REPEATABLE READ) via PyMySQL |
+| Database | **MySQL 8.0** (InnoDB, utf8mb4, READ COMMITTED) via PyMySQL |
 | Auth | **PyJWT** (HS256) + **bcrypt** via passlib |
 | Rate limiting | **slowapi** |
 | Logging | **structlog** |
@@ -145,7 +145,13 @@ src/common/config.py        Settings from env vars; refuses to boot production
 src/common/security.py      bcrypt hashing, JWT sign/verify, Role enum, and the
                             require_roles() / require_staff() guards.
 src/common/middleware.py    Request-id correlation, hardening headers, and the
-                            uniform {"error": {code, message, request_id}} body.
+                            frozen envelope (code/message/data/request_id/
+                            timestamp) with 5-digit business error codes.
+src/common/errors.py        The frozen error-code catalogue + ApiError, so
+                            services can signal a business rule without
+                            importing FastAPI.
+src/common/envelope.py      success()/failure() builders and the pagination
+                            shape required by the contract.
 src/common/audit.py         AuditLog table + record_audit() with automatic
                             redaction of credential-like keys.
 src/data/database.py        Engine/session, lock_for_update() (SELECT … FOR UPDATE)

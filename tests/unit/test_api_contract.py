@@ -15,6 +15,7 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from src.common.config import Settings
+from src.common.errors import ErrorCode, slot_conflict
 from src.common.middleware import register_middleware
 from src.common.security import Role, require_roles
 from src.presentation.api.main import create_app
@@ -28,6 +29,21 @@ class TestHealth:
     def test_health_returns_200(self, client: TestClient) -> None:
         assert client.get("/health").status_code == status.HTTP_200_OK
 
+    def test_contract_health_path_also_served(self, client: TestClient) -> None:
+        """Manual §4.1 mandates the `/api/v1/` prefix; Wave 1 acceptance checks it."""
+        response = client.get("/api/v1/health")
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["data"]["status"] == "ok"
+
+    def test_alias_and_contract_path_return_the_same_payload(self, client: TestClient) -> None:
+        """Two routes, one handler: they must not be able to drift apart.
+
+        The request id and timestamp differ per call, so compare only `data`.
+        """
+        contract = client.get("/api/v1/health").json()["data"]
+        alias = client.get("/health").json()["data"]
+        assert contract == alias
+
     def test_health_does_not_need_the_database(self, client: TestClient) -> None:
         """Liveness must stay up while MySQL is down.
 
@@ -35,10 +51,26 @@ class TestHealth:
         recovering the database.
         """
         payload = client.get("/health").json()
-        assert payload["status"] == "ok"
+        # The liveness fields live under `data` now that every endpoint returns
+        # the frozen envelope (manual §4.2).
+        assert payload["data"]["status"] == "ok"
 
     def test_health_reports_environment(self, client: TestClient) -> None:
-        assert client.get("/health").json()["environment"] == "testing"
+        assert client.get("/health").json()["data"]["environment"] == "testing"
+
+    def test_health_is_wrapped_in_the_envelope(self, client: TestClient) -> None:
+        """The container HEALTHCHECK only asserts HTTP 200, so wrapping is safe."""
+        payload = client.get("/health").json()
+        assert payload["code"] == 0
+        assert payload["message"] == "ok"
+        assert set(payload) == {"code", "message", "data", "request_id", "timestamp"}
+
+    def test_alias_is_hidden_from_the_openapi_document(self, client: TestClient) -> None:
+        """Documenting two health endpoints invites the frontend to use the
+        non-contract one; the alias exists for infrastructure only."""
+        paths = client.get("/openapi.json").json()["paths"]
+        assert "/api/v1/health" in paths
+        assert "/health" not in paths
 
     def test_health_exposes_no_secrets(self, client: TestClient) -> None:
         """The probe is unauthenticated, so it must not echo configuration."""
@@ -188,6 +220,16 @@ def probe_app() -> FastAPI:
     async def echo(missing: str) -> dict[str, Any]:
         return {"missing": missing}
 
+    @app.get("/conflict")
+    async def conflict() -> None:
+        """Raise the domain error that is this project's concurrency evidence.
+
+        The reservation service raises exactly this when the unique-constraint
+        safety net fires, so the envelope it produces is contract-critical: the
+        frontend and the concurrency acceptance test both key on code 20001.
+        """
+        raise slot_conflict("conflict with reservation #1024")
+
     return app
 
 
@@ -197,10 +239,24 @@ def probe_client(probe_app: FastAPI) -> TestClient:
 
 
 class TestErrorEnvelope:
-    def test_unhandled_error_returns_500_envelope(self, probe_client: TestClient) -> None:
+    """The frozen envelope from manual §4.2.
+
+    Shape on failure: a FLAT object with these keys —
+    ``code``, ``message``, ``data`` (null), ``errors`` (omitted when there is no
+    field-level detail), ``request_id`` and ``timestamp``.
+    There is deliberately no outer ``{"error": {...}}`` wrapper — the earlier
+    nested shape is what the contract replaced, and these tests are the thing
+    that stops it creeping back.
+    """
+
+    def test_unhandled_error_returns_the_internal_code(self, probe_client: TestClient) -> None:
         payload = probe_client.get("/boom").json()
-        assert payload["error"]["code"] == 500
-        assert "request_id" in payload["error"]
+        # 50001, not the bare HTTP 500: the body carries the frozen business code.
+        assert payload["code"] == int(ErrorCode.INTERNAL_ERROR)
+        assert payload["message"] == "服务器内部错误"
+        assert payload["data"] is None
+        assert "request_id" in payload
+        assert "timestamp" in payload
 
     def test_unhandled_error_does_not_leak_internals(self, probe_client: TestClient) -> None:
         """Exception text routinely contains SQL, paths and credentials (OWASP A05)."""
@@ -209,37 +265,91 @@ class TestErrorEnvelope:
         assert "RuntimeError" not in body
         assert "Traceback" not in body
 
-    def test_http_exception_keeps_its_status_and_detail(self, probe_client: TestClient) -> None:
+    def test_envelope_has_no_legacy_error_wrapper(self, probe_client: TestClient) -> None:
+        """Pin the flat shape: a top-level "error" key means someone reverted it."""
+        payload = probe_client.get("/boom").json()
+        assert "error" not in payload
+        assert set(payload) == {"code", "message", "data", "request_id", "timestamp"}
+
+    def test_timestamp_is_iso8601_utc_with_z(self, probe_client: TestClient) -> None:
+        """The frontend parses this string; the contract fixes it to a `Z` suffix."""
+        ts = probe_client.get("/boom").json()["timestamp"]
+        assert ts.endswith("Z")
+        assert "+" not in ts  # not the `+00:00` spelling
+        from datetime import datetime
+
+        datetime.strptime(ts, "%Y-%m-%dT%H:%M:%SZ")  # raises if malformed
+
+    def test_bare_http_exception_maps_to_a_frozen_code(self, probe_client: TestClient) -> None:
         response = probe_client.get("/denied")
         assert response.status_code == 403
-        assert response.json()["error"]["message"] == "Forbidden by policy"
+        # A bare HTTPException(403) has no business code, so the middleware maps
+        # it onto the frozen 30003 rather than echoing the HTTP number.
+        assert response.json()["code"] == int(ErrorCode.PERMISSION_DENIED)
 
-    def test_validation_error_lists_the_offending_field(self, probe_client: TestClient) -> None:
-        """The frontend needs to know *which* field to highlight."""
+    def test_domain_error_carries_its_business_code(self, probe_client: TestClient) -> None:
+        """The concurrency-evidence path: ApiError(20001) must survive to the client."""
+        response = probe_client.get("/conflict")
+        assert response.status_code == 409
+        payload = response.json()
+        assert payload["code"] == int(ErrorCode.SLOT_ALREADY_BOOKED)
+        assert payload["message"] == "该时段该餐桌已被预订"
+
+    def test_domain_error_includes_field_level_detail(self, probe_client: TestClient) -> None:
+        payload = probe_client.get("/conflict").json()
+        errors = payload["errors"]
+        assert any(e["field"] == "slot_id" for e in errors)
+        assert any("reservation #1024" in e["detail"] for e in errors)
+
+    def test_validation_error_uses_the_validation_code(self, probe_client: TestClient) -> None:
+        """A missing required query param is 10001, not a bare 422."""
         response = probe_client.get("/echo")
         # Literal 422 rather than status.HTTP_422_UNPROCESSABLE_ENTITY: starlette
         # deprecated that constant name in 1.7 (renamed to
         # HTTP_422_UNPROCESSABLE_CONTENT) and this suite treats warnings as
         # errors. See the matching note in src/common/middleware.py.
         assert response.status_code == 422
-        fields = response.json()["error"]["fields"]
+        payload = response.json()
+        assert payload["code"] == int(ErrorCode.VALIDATION_FAILED)
+
+    def test_validation_error_lists_the_offending_field(self, probe_client: TestClient) -> None:
+        """The frontend needs to know *which* field to highlight."""
+        payload = probe_client.get("/echo").json()
+        fields = payload["errors"]
         assert any(field["field"] == "missing" for field in fields)
+
+    def test_validation_error_uses_contract_detail_key(self, probe_client: TestClient) -> None:
+        """Manual §4.2 names the key `detail`, not `message` — easy to get wrong."""
+        field = probe_client.get("/echo").json()["errors"][0]
+        assert "detail" in field
+        assert "message" not in field
 
     def test_validation_error_drops_the_body_marker(self, probe_client: TestClient) -> None:
         """`body.missing` is noise to a client; the field name alone is enough."""
-        fields = probe_client.get("/echo").json()["error"]["fields"]
+        fields = probe_client.get("/echo").json()["errors"]
         assert all(not field["field"].startswith("body.") for field in fields)
+
+    def test_errors_key_absent_when_no_field_detail(self, probe_client: TestClient) -> None:
+        """A 500 has no field-level detail; `errors` must be omitted, not `[]`.
+
+        This lets the client distinguish "no fields to highlight" from "these
+        specific fields are wrong" by key presence.
+        """
+        payload = probe_client.get("/boom").json()
+        assert "errors" not in payload
 
     def test_error_response_carries_a_request_id_header(self, probe_client: TestClient) -> None:
         response = probe_client.get("/boom")
         header_id = response.headers["X-Request-ID"]
-        body_id = response.json()["error"]["request_id"]
+        body_id = response.json()["request_id"]
         assert header_id == body_id
 
     def test_unknown_route_returns_the_envelope(self, client: TestClient) -> None:
         response = client.get("/no-such-endpoint")
         assert response.status_code == status.HTTP_404_NOT_FOUND
-        assert "error" in response.json()
+        payload = response.json()
+        assert payload["code"] == int(ErrorCode.RESOURCE_NOT_FOUND)
+        assert "request_id" in payload
 
 
 # ---------------------------------------------------------------------------

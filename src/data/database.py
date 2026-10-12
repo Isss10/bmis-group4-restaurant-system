@@ -19,7 +19,23 @@ Additionally, ``SELECT ... FOR UPDATE`` (pessimistic locking) is available via
 MySQL 8.0 notes
 ---------------
 * InnoDB is required — MyISAM has no transactions or row locks.
-* ``REPEATABLE READ`` is MySQL's default and is what we use.
+* The isolation level is **READ COMMITTED**, set explicitly per session. This
+  overrides MySQL's default (REPEATABLE READ) and is required by the frozen
+  contract (manual §5.3, layer 1). Do not change it without a contract review:
+
+  - Under READ COMMITTED, ``SELECT ... FOR UPDATE`` on an *existing* row takes an
+    exclusive record lock and serialises contenders — which is all layer 1 needs
+    to do (two waiters changing one reservation's status).
+  - On a *non-existent* row READ COMMITTED takes no gap lock, so two concurrent
+    bookings for the same free slot can both pass the check and race to INSERT.
+    That is expected and is exactly what layer 3 exists for: the unique
+    constraint rejects the second insert and the service maps ``IntegrityError``
+    to error code 20001. Correctness comes from the constraint, not from gap
+    locking.
+  - Choosing READ COMMITTED deliberately trades that gap-lock protection for far
+    fewer deadlocks and no phantom-read blocking on the hot booking path. Under
+    REPEATABLE READ, concurrent inserts into the same gap deadlock readily, and a
+    deadlocked booking request is a failed customer, not a slower one.
 * ``pool_recycle`` must be shorter than MySQL's ``wait_timeout`` (8 hours by
   default) or the pool hands out connections the server already closed,
   producing ``MySQL server has gone away`` errors under load.
@@ -132,10 +148,16 @@ def _build_engine(settings: Settings) -> Engine:
         ``FOR UPDATE`` combined with InnoDB gives row-level locking. We also
         make sure the connection is not in autocommit mode, which would
         silently defeat every transaction in the application.
+
+        The isolation level is set per session rather than relying on a server
+        default: a DBA changing ``transaction_isolation`` in my.cnf must not be
+        able to silently alter the booking guarantee. See the module docstring
+        for why READ COMMITTED is the contract's choice and what each of the
+        three defence layers contributes at that level.
         """
         try:
             with dbapi_connection.cursor() as cursor:
-                cursor.execute("SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ")
+                cursor.execute("SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED")
                 cursor.execute("SET SESSION sql_mode='STRICT_TRANS_TABLES'")
             dbapi_connection.autocommit = False
         except Exception:  # non-MySQL backends (tests) lack these
