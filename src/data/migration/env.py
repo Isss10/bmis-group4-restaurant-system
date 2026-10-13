@@ -21,6 +21,7 @@ from sqlalchemy import engine_from_config, pool
 
 from src.common.config import get_settings
 from src.data.database import Base
+from src.data.schema import DishRatingStats, Review, ReviewModeration  # noqa: F401
 
 # Alembic's Config object, giving access to alembic.ini values.
 config = context.config

@@ -75,11 +75,6 @@ class Base(DeclarativeBase):
     metadata = MetaData(naming_convention=NAMING_CONVENTION)
 
 
-# ---------------------------------------------------------------------------
-# Shared column types
-# ---------------------------------------------------------------------------
-
-
 class TimestampMixin:
     """Adds server-maintained created_at / updated_at to a model.
 
@@ -90,21 +85,20 @@ class TimestampMixin:
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        server_default=func.now(),
         nullable=False,
+        server_default=func.now(),
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
+        nullable=False,
         server_default=func.now(),
         onupdate=func.now(),
-        nullable=False,
     )
 
 
 # ---------------------------------------------------------------------------
 # Engine & session factory
 # ---------------------------------------------------------------------------
-
 _engine: Engine | None = None
 _session_factory: sessionmaker[Session] | None = None
 
@@ -184,8 +178,6 @@ def reset_engine() -> None:
 # ---------------------------------------------------------------------------
 # FastAPI dependency
 # ---------------------------------------------------------------------------
-
-
 def get_db() -> Generator[Session, None, None]:
     """Yield a request-scoped session, rolling back on any exception.
 
@@ -195,7 +187,7 @@ def get_db() -> Generator[Session, None, None]:
         def list_tables(db: Session = Depends(get_db)): ...
 
     The rollback-on-error is what prevents a half-applied booking from
-    persisting. `expire_on_commit=False` means returned objects stay readable
+    persisting. ``expire_on_commit=False`` means returned objects stay readable
     after commit, so a response model can be built without a second query.
     """
     session = get_session_factory()()
@@ -239,8 +231,6 @@ def session_scope() -> Iterator[Session]:
 # ---------------------------------------------------------------------------
 # Concurrency helpers
 # ---------------------------------------------------------------------------
-
-
 def lock_for_update(session: Session, model: type[Any], *where: Any) -> Any | None:
     """Load one row with ``SELECT ... FOR UPDATE``.
 
