@@ -176,9 +176,15 @@ deploy/docker/              Multi-stage Dockerfile + docker-compose with MySQL 8
 | `docs/{requirements,testing,user-manual}/` | requirements, test report, user manual | per §6 |
 
 `src/presentation/api/main.py` registers module routers by convention: create a
-`router` object in `src/application/<module>/router.py` and it is mounted at
-`/api/v1/<module>` automatically. Missing modules are skipped with a debug log,
-so a half-finished module cannot break the app for everyone else.
+`router` object in `src/presentation/api/routers/<module>.py` and it is mounted
+at the base path frozen in `_MODULE_ROUTERS` — `/api/v1/reservations`,
+`/api/v1/orders`, `/api/v1/staff`, `/api/v1/membership`, `/api/v1/reviews`,
+`/api/v1/analytics`. Note the router lives in the **presentation** tier, not in
+`src/application/<module>/`: ARCHITECTURE.md §3 forbids `fastapi` imports in the
+application tier, so services stay framework-free and unit-testable. Missing
+modules are skipped with a debug log, so a half-finished module cannot break the
+app for everyone else. `tests/unit/test_router_registration.py` pins both the
+paths and the tier rule.
 
 Read **[docs/design/ARCHITECTURE.md](docs/design/ARCHITECTURE.md)** before writing
 code. It documents the dependency rule (which tier may import what), the booking

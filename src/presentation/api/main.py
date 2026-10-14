@@ -310,25 +310,59 @@ def _build_auth_router() -> APIRouter:
     return router
 
 
+# Frozen module → (router module path, base path).
+#
+# Both halves of this mapping are contract, not convention, and the two are
+# deliberately written out rather than derived:
+#
+# * **Router location** is `src/presentation/api/routers/<module>.py`, per
+#   ARCHITECTURE.md §2 (the ASCII diagram lists `api/routers/  one router per
+#   module`) and §3's dependency rule — the application tier "Must NOT import
+#   `fastapi`", so a router cannot live there. §6 names this directory as the
+#   REST API contract boundary owned by YAN ZHANG.
+# * **Base path** is spelled out because the module *directory* is singular
+#   (`reservation/`) while the frozen API path is plural
+#   (`/api/v1/reservations`, manual §4.2 "plural nouns"; also the table in
+#   `_DESCRIPTION` above and ARCHITECTURE.md §2). Deriving the prefix from the
+#   directory name produced `/api/v1/reservation` — a path no document ever
+#   advertised, so all three Vue apps would 404 while every CI job stayed
+#   green, because nothing asserted the mounted prefix.
+#
+# `tests/unit/test_router_registration.py` pins this mapping. Changing a base
+# path means changing that test *and* the documents above, in one PR.
+_MODULE_ROUTERS: dict[str, tuple[str, str]] = {
+    "reservation": ("src.presentation.api.routers.reservation", "/api/v1/reservations"),
+    "ordering": ("src.presentation.api.routers.ordering", "/api/v1/orders"),
+    "staff": ("src.presentation.api.routers.staff", "/api/v1/staff"),
+    "membership": ("src.presentation.api.routers.membership", "/api/v1/membership"),
+    "review": ("src.presentation.api.routers.review", "/api/v1/reviews"),
+    "analytics": ("src.presentation.api.routers.analytics", "/api/v1/analytics"),
+}
+
+
 def _register_module_routers(app: FastAPI) -> None:
-    """Attach each module's router under /api/v1, tolerating missing modules.
+    """Attach each module's router at its frozen base path, tolerating absences.
 
-    The five modules are being implemented in parallel by different people
-    (see README §6). A module whose router does not exist yet must not break
-    the whole application, so import failures are logged and skipped. Remove
-    the try/except once all five modules have landed and CI covers them.
+    The modules are being implemented in parallel by different people (see
+    README §6). A module whose router does not exist yet must not break the
+    whole application, so import failures are logged and skipped — that is why
+    `/health` starts even with an empty repository. Remove the try/except once
+    every module has landed and CI covers them.
+
+    A router that *exists* but is malformed is louder than one that is missing:
+    the exception is logged with a traceback rather than swallowed, because a
+    typo in a merged module should be visible in the container log.
+
+    `include_router` is inside the try as well. Importing cleanly is not the
+    same as mounting cleanly — a module that exports something which is not an
+    APIRouter (or a router with a decorator FastAPI rejects) raises here, and
+    without this the whole application fails to start: `/health` never comes
+    up, so Docker's health check fails and the container restarts in a loop.
+    One module's typo must not take the entire API down with it.
     """
-    module_paths = {
-        "reservation": "src.application.reservation.router",
-        "ordering": "src.application.ordering.router",
-        "membership": "src.application.membership.router",
-        "review": "src.application.review.router",
-        "analytics": "src.application.analytics.router",
-    }
-
     import importlib
 
-    for name, path in module_paths.items():
+    for name, (path, prefix) in _MODULE_ROUTERS.items():
         try:
             module = importlib.import_module(path)
         except ModuleNotFoundError:
@@ -343,8 +377,16 @@ def _register_module_routers(app: FastAPI) -> None:
             logger.warning("Module %s has no `router` attribute; skipped", name)
             continue
 
-        app.include_router(router, prefix=f"/api/v1/{name}", tags=[name])
-        logger.info("Registered router for module %s at /api/v1/%s", name, name)
+        try:
+            app.include_router(router, prefix=prefix, tags=[name])
+        except Exception:
+            logger.exception(
+                "Router for module %s imported but could not be mounted at %s; skipped",
+                name,
+                prefix,
+            )
+            continue
+        logger.info("Registered router for module %s at %s", name, prefix)
 
 
 # The ASGI entry point used by uvicorn and by the Dockerfile.
