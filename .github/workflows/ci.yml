@@ -91,6 +91,37 @@ jobs:
           fi
           echo "OK: no oversized files."
 
+      - name: Block empty source files that import as nothing
+        run: |
+          # PR #3 shipped src/application/reservation/models.py and
+          # repository.py as zero-byte files while service.py did
+          # `from models import ...`. The module raised ModuleNotFoundError on
+          # import and all eight jobs still passed, because no test imported it.
+          # An empty file plus no test covering it is a silent green pipeline,
+          # so fail the build instead of leaving it to review.
+          #
+          # __init__.py and .gitkeep are legitimately empty and excluded.
+          echo "Checking tracked source files for empty placeholders..."
+          FAILED=0
+          while IFS= read -r f; do
+            case "$f" in
+              *__init__.py|*.gitkeep) continue ;;
+            esac
+            if [ ! -s "$f" ]; then
+              echo "::error::Empty source file committed: $f"
+              FAILED=1
+            fi
+          done < <(git ls-files '*.py' '*.ts' '*.js' '*.vue' '*.sql' || true)
+          if [ "$FAILED" -ne 0 ]; then
+            echo ""
+            echo "An empty module imports as nothing. If a teammate's code imports"
+            echo "from it, that breaks at runtime — and no test will notice unless"
+            echo "one imports it too. Either fill the file in or delete it, and add"
+            echo "a test that imports the module (see CONTRIBUTING.md)."
+            exit 1
+          fi
+          echo "OK: no empty source files."
+
       # Untrusted text (PR titles, commit messages) is bound to env and never
       # interpolated into the shell — direct interpolation allows script
       # injection from a crafted PR title.
