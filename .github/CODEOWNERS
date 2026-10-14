@@ -1,0 +1,82 @@
+# CODEOWNERS — automatic review requests per directory.
+#
+# Required by §2 of the standards manual ("CODEOWNERS 目录→负责人，自动请求评审")
+# and by ARCHITECTURE.md §6, which names an owner for each shared boundary.
+#
+# How the accounts below were established
+# ---------------------------------------
+# Every entry is backed by evidence in the repository, not by guesswork:
+#
+#   Isss10            -> YAN ZHANG (M1)   repository owner; SSH auth identity
+#   ggnogg            -> KEYING CHEN (M2) commit email k.chen.25@abdn.ac.uk
+#   heisye0539-dev    -> RANXI HE (M3)    commit author name on the staff branch
+#   Cathyzzh          -> ZIHAN ZHU (M5)   commit author name on the order-page branch
+#   xueyuanyuan-hit   -> YUANYUAN XUE (M8) commit email 1023505265@qq.com
+#
+# Deliberately NOT listed, because no commit in this repository ties an account
+# to these members. A wrong owner silently routes review requests to the wrong
+# person, which is worse than no owner:
+#
+#   * M9  RUNYI PENG        (ratings & reviews) — `pry1a1` authored PR #2, which
+#       added the review/moderation/rating-stats tables, so it is probably M9,
+#       but the commit email (a20070423_chan@qq.com) carries no name and those
+#       tables are equally the M8 schema owner's territory. Confirm before
+#       uncommenting the `review` lines below.
+#   * M10                   (membership) — `Arrokoth777` authored PR #5, whose
+#       content declares itself "Member10", but that is a self-report in a PR
+#       description, not a verified identity. Confirm before uncommenting.
+#   * M4  GEMAN MENG        (membership & loyalty, integration testing)
+#   * M6  HUANPAI LI        (analytics) — commits exist on `huanpai-M6`, but the
+#       author is not linked to a GitHub account, so the login is unknown
+#   * M7  JIAYI TAN         (testing, user manual, video)
+#   * accounts `heb239` and `hjkyp9zdqd-hue` have accepted access but have not
+#       committed anything, so they cannot be attributed to a member yet
+#
+# Ask each of the above for their GitHub username and uncomment the matching
+# line. Until then those paths fall through to the repository owner.
+#
+# Syntax notes: later patterns win over earlier ones. A path owned by a team of
+# two lists both accounts on the same line (either can approve).
+
+# --- Shared foundation: M1 owns every cross-cutting boundary -----------------
+# ARCHITECTURE.md §6: role definitions, error envelope and CI all name
+# YAN ZHANG, because one change there breaks all ten contributors.
+*                                    @Isss10
+/src/common/                         @Isss10
+/src/presentation/api/main.py        @Isss10
+/.github/                            @Isss10
+/pyproject.toml                      @Isss10
+/alembic.ini                         @Isss10
+
+# --- Module directories (ARCHITECTURE.md §6 / README §6) ---------------------
+/src/application/reservation/        @ggnogg
+/src/application/ordering/           @Cathyzzh
+# /src/application/membership/       @<M4 GEMAN MENG> @<M10>
+# /src/application/review/           @pry1a1   # confirm M9 first
+# /src/application/analytics/        @<M6 HUANPAI LI>
+
+# --- The database layer is the most collision-prone boundary ----------------
+# ARCHITECTURE.md §6: never edit an applied migration. Autogenerate will try to
+# DROP a table whose model is not imported in env.py, so both files are owned.
+/src/data/schema/                    @xueyuanyuan-hit
+/src/data/migration/versions/        @xueyuanyuan-hit
+/src/data/migration/env.py           @xueyuanyuan-hit
+
+# --- Routers: the REST contract, owned by M1 ---------------------------------
+# Every base path here is frozen in `_MODULE_ROUTERS` and asserted by
+# tests/unit/test_router_registration.py. A router PR changes the public API of
+# a module, so M1 reviews it even though the module owner writes it.
+/src/presentation/api/routers/       @Isss10
+
+# --- Frontends: module owners, per README §6 ---------------------------------
+/src/presentation/web/               @Cathyzzh
+/src/presentation/staff/             @heisye0539-dev
+# /src/presentation/manager/         @<M6 HUANPAI LI>
+
+# --- Tests and documentation -------------------------------------------------
+/tests/                              @Isss10
+/docs/requirements/                  @Isss10
+/docs/design/                        @Isss10
+/docs/api/                           @Isss10
+# /docs/user-manual/                 @<M7 JIAYI TAN>
+# /docs/testing/                     @<M4 GEMAN MENG> @<M7 JIAYI TAN>
