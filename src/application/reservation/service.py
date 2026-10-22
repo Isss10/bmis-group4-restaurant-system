@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
-
-from models import Reservation, ReservationStatus
+from .models import Reservation, ReservationStatus
+from .repository import ReservationRepository
 
 
 class ReservationService:
