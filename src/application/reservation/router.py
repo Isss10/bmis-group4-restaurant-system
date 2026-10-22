@@ -1,6 +1,8 @@
 from datetime import datetime
+
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
+
 from .service import ReservationService
 
 router = APIRouter(prefix="/reservations", tags=["Reservations"])
@@ -23,7 +25,7 @@ def create_reservation(payload: ReservationCreateSchema):
         )
         return {"success": True, "data": res}
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @router.post("/{reservation_id}/cancel")

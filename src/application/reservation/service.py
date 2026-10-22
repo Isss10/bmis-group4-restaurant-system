@@ -1,11 +1,13 @@
 from datetime import datetime, timedelta
+
 from .models import Reservation, ReservationStatus
 from .repository import ReservationRepository
 
 
 class ReservationService:
-    def __init__(self, repository):
-        self.repository = repository
+
+    def __init__(self, repository: ReservationRepository | None = None):
+        self.repository = repository or ReservationRepository()
         self.hold_duration_minutes = 15
 
     def create_reservation(

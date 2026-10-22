@@ -1,10 +1,12 @@
-import enum
 from datetime import datetime
+import enum
+
 from sqlalchemy import Column, DateTime, Enum, Integer, String
+
 from src.data.database import Base
 
 
-class ReservationStatus(str, enum.Enum):
+class ReservationStatus(enum.StrEnum):
     PENDING = "PENDING"
     CONFIRMED = "CONFIRMED"
     CANCELLED = "CANCELLED"
