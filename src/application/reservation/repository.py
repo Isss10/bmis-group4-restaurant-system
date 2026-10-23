@@ -1,5 +1,3 @@
-from typing import Optional
-
 from src.data.database import session_scope
 
 from .models import Reservation, ReservationStatus
