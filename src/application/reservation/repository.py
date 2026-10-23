@@ -1,6 +1,10 @@
 from typing import Optional
-from src.data.database import Base
+
+from src.data.database import session_scope
+
 from .models import Reservation, ReservationStatus
+
+
 class ReservationRepository:
 
     def create(self, user_id: str, table_id: int, reservation_time) -> Reservation:
@@ -16,8 +20,7 @@ class ReservationRepository:
             session.refresh(reservation)
             return reservation
 
-    def get_by_id_with_lock(self, reservation_id: int) -> Optional[Reservation]:
-        """使用 with_for_update 进行悲观加锁，防止并发冲突"""
+    def get_by_id_with_lock(self, reservation_id: int) -> Reservation | None:
         with session_scope() as session:
             return (
                 session.query(Reservation)
@@ -26,7 +29,9 @@ class ReservationRepository:
                 .first()
             )
 
-    def update_status(self, reservation_id: int, status: ReservationStatus) -> Optional[Reservation]:
+    def update_status(
+        self, reservation_id: int, status: ReservationStatus
+    ) -> Reservation | None:
         with session_scope() as session:
             reservation = (
                 session.query(Reservation)
