@@ -4,7 +4,6 @@ from .models import Reservation, ReservationStatus
 
 
 class ReservationRepository:
-
     def create(self, user_id: str, table_id: int, reservation_time) -> Reservation:
         with session_scope() as session:
             reservation = Reservation(
@@ -28,9 +27,7 @@ class ReservationRepository:
                 .first()
             )
 
-    def update_status(
-        self, reservation_id: int, status: ReservationStatus
-    ) -> Reservation | None:
+    def update_status(self, reservation_id: int, status: ReservationStatus) -> Reservation | None:
         with session_scope() as session:
             reservation = (
                 session.query(Reservation)
