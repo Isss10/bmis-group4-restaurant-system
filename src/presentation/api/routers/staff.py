@@ -9,23 +9,23 @@ except ImportError:
         return {"code": 200, "message": message, "data": data}
 
 router = APIRouter(
-    tags=["Staff"]
+    tags=["Staff"])
 
 def require_staff_roles():
     return {"role": "waiter"}#等待会员模块完善
 
-@router.get("/reservations")
+@router.get("/staff/reservations")
 def get_reservations(current_user: dict = Depends(require_staff_roles)) -> dict:
     """
     Get all reservations for staff.
     """
-    #模拟数据：
+    #模拟数据:
     mock_data = [{"id": 1, "status": "confirmed", "time": "18:00"}]
     #使用 success() 封包
     return success(data=mock_data, message="Reservation list retrieved")
 
 
-@router.patch("/reservations/{reservation_id}")
+@router.patch("/staff/reservations/{reservation_id}")
 def update_reservation_status(
     reservation_id: int,
     current_user: dict = Depends(require_staff_roles)
@@ -37,7 +37,7 @@ def update_reservation_status(
     return success(data=mock_data, message="Reservation status updated")
 
 
-@router.get("/orders")
+@router.get("/staff/orders")
 def get_orders(current_user: dict = Depends(require_staff_roles)) -> dict:
     """
     Get customer orders.
@@ -46,7 +46,7 @@ def get_orders(current_user: dict = Depends(require_staff_roles)) -> dict:
     return success(data=mock_data, message="Order list retrieved")
 
 
-@router.patch("/orders/{order_id}")
+@router.patch("/staff/orders/{order_id}")
 def update_order_status(
     order_id: int,
     current_user: dict = Depends(require_staff_roles)
