@@ -1,4 +1,4 @@
-﻿from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session
 
 from src.application.review.exceptions import DishNotInOrderError
 from src.application.review.schemas import ReviewCreate

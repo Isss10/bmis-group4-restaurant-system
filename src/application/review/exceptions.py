@@ -1,4 +1,4 @@
-﻿class ReviewDomainError(Exception):
+class ReviewDomainError(Exception):
     """Base exception for review module."""
 
     pass

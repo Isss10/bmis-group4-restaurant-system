@@ -1,4 +1,4 @@
-﻿from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session
 
 from src.application.review.schemas import ReviewCreate
 from src.application.review.service import submit_review
