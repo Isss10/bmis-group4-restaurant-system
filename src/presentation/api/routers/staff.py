@@ -21,7 +21,7 @@ def require_staff_roles():
 
 
 @router.get("/staff/reservations")
-def get_reservations(current_user: dict = Depends(require_staff_roles)) ->Any:
+def get_reservations(current_user: dict = Depends(require_staff_roles)) -> Any:
     """
     Get all reservations for staff.
     """
