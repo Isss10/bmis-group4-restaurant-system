@@ -5,6 +5,7 @@ from .repository import ReservationRepository
 
 
 class ReservationService:
+
     def __init__(self, repository: ReservationRepository | None = None):
         self.repository = repository or ReservationRepository()
         self.hold_duration_minutes = 15

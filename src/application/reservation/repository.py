@@ -4,6 +4,7 @@ from .models import Reservation, ReservationStatus
 
 
 class ReservationRepository:
+
     def create(self, user_id: str, table_id: int, reservation_time) -> Reservation:
         with session_scope() as session:
             reservation = Reservation(
@@ -18,7 +19,6 @@ class ReservationRepository:
             return reservation
 
     def get_by_id_with_lock(self, reservation_id: int) -> Reservation | None:
-        """使用 with_for_update 进行悲观加锁, 防止并发冲突"""
         with session_scope() as session:
             return (
                 session.query(Reservation)
@@ -27,7 +27,9 @@ class ReservationRepository:
                 .first()
             )
 
-    def update_status(self, reservation_id: int, status: ReservationStatus) -> Reservation | None:
+    def update_status(
+        self, reservation_id: int, status: ReservationStatus
+    ) -> Reservation | None:
         with session_scope() as session:
             reservation = (
                 session.query(Reservation)
