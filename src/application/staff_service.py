@@ -6,7 +6,7 @@ class StaffService:
         """
         Return reservation list.
         """
-        #模拟数据
+        # 模拟数据
         return [{"id": 1, "status": "booked", "table_id": 5}]
 
     def update_reservation_status(self, reservation_id, status):
@@ -26,4 +26,3 @@ class StaffService:
         Update order status.
         """
         return {"order_id": order_id, "status": status, "message": "updated"}
-
