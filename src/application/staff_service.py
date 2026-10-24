@@ -6,22 +6,24 @@ class StaffService:
         """
         Return reservation list.
         """
-        pass
+        #模拟数据
+        return [{"id": 1, "status": "booked", "table_id": 5}]
 
     def update_reservation_status(self, reservation_id, status):
         """
         Update reservation status.
         """
-        pass
+        return {"reservation_id": reservation_id, "status": status, "message": "updated"}
 
     def get_orders(self):
         """
         Return order list.
         """
-        pass
+        return [{"id": 101, "items": ["pizza"], "status": "pending"}]
 
     def update_order_status(self, order_id, status):
         """
         Update order status.
         """
-        pass
+        return {"order_id": order_id, "status": status, "message": "updated"}
+
