@@ -19,6 +19,7 @@ class ReservationRepository:
             return reservation
 
     def get_by_id_with_lock(self, reservation_id: int) -> Reservation | None:
+        """使用 with_for_update 进行悲观加锁, 防止并发冲突"""
         with session_scope() as session:
             return (
                 session.query(Reservation)
