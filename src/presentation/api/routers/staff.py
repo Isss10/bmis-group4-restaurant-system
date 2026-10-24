@@ -1,5 +1,7 @@
 from typing import Any
+
 # ruff: noqa: B008
+
 from fastapi import APIRouter, Depends
 
 router = APIRouter(tags=["Staff"])
@@ -20,7 +22,7 @@ def require_staff_roles():
 
 
 @router.get("/staff/reservations")
-def get_reservations(current_user: dict = Depends(require_staff_roles)) ->any:
+def get_reservations(current_user: dict = Depends(require_staff_roles)) ->Any:
     """
     Get all reservations for staff.
     """
@@ -33,7 +35,7 @@ def get_reservations(current_user: dict = Depends(require_staff_roles)) ->any:
 @router.patch("/staff/reservations/{reservation_id}")
 def update_reservation_status(
     reservation_id: int, current_user: dict = Depends(require_staff_roles)
-) -> any:
+) -> Any:
     """
     Update reservation status.
     """
@@ -42,7 +44,7 @@ def update_reservation_status(
 
 
 @router.get("/staff/orders")
-def get_orders(current_user: dict = Depends(require_staff_roles)) -> any:
+def get_orders(current_user: dict = Depends(require_staff_roles)) -> Any:
     """
     Get customer orders.
     """
@@ -51,7 +53,7 @@ def get_orders(current_user: dict = Depends(require_staff_roles)) -> any:
 
 
 @router.patch("/staff/orders/{order_id}")
-def update_order_status(order_id: int, current_user: dict = Depends(require_staff_roles)) -> any:
+def update_order_status(order_id: int, current_user: dict = Depends(require_staff_roles)) -> Any:
     """
     Update order status.
     """
