@@ -1,3 +1,4 @@
+# ruff: noqa: B008
 from fastapi import APIRouter, Depends
 
 router = APIRouter(tags=["Staff"])
