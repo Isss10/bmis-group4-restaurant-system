@@ -38,6 +38,11 @@ logger = logging.getLogger("alembic.env")
 # a module, import that module here. A model that is not imported is invisible
 # to autogenerate, and the resulting migration will try to delete its table.
 _IMPORT_MODEL_MODULES: tuple[str, ...] = (
+    # `AuditLog` lives in src/common/audit.py rather than src/data/schema/,
+    # because the services that write audit rows import the helper from there.
+    # It is still a mapped model on `Base`, so it must be registered here or
+    # autogenerate will emit a migration that DROPS audit_logs.
+    "src.common.audit",
     # Example — uncomment as each module's models are implemented:
     # "src.data.schema.reservation",
     # "src.data.schema.ordering",
