@@ -1,13 +1,12 @@
 from datetime import datetime
+
 from src.data.database import session_scope
+
 from .models import Reservation, ReservationStatus
 
 
 class ReservationRepository:
-
-    def create(
-        self, user_id: str, table_id: int, reservation_time: datetime
-    ) -> dict:
+    def create(self, user_id: str, table_id: int, reservation_time: datetime) -> dict:
         with session_scope() as session:
             reservation = Reservation(
                 user_id=user_id,
@@ -28,9 +27,7 @@ class ReservationRepository:
                 "status": res_status,
             }
 
-    def update_status(
-        self, reservation_id: int, status: ReservationStatus
-    ) -> dict | None:
+    def update_status(self, reservation_id: int, status: ReservationStatus) -> dict | None:
         with session_scope() as session:
             reservation = (
                 session.query(Reservation)
