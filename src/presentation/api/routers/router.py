@@ -1,33 +1,32 @@
+from datetime import datetime
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from .service import ReservationService
+from src.application.reservation.service import ReservationService
 
-router = APIRouter()
+router = APIRouter(prefix="/reservations", tags=["reservation"])
 service = ReservationService()
 
 
 class ReservationCreateSchema(BaseModel):
     table_id: int
     user_id: str
-    reservation_time: str
+    reservation_time: datetime
 
 
-@router.post("/reservations")
+@router.post("")
 def create_reservation(payload: ReservationCreateSchema) -> dict:
     res = service.create_reservation(
-        table_id=str(payload.table_id),
-        customer_name=payload.user_id,
-        start_time=None,
-        end_time=None,
+        table_id=payload.table_id,
         user_id=payload.user_id,
+        reservation_time=payload.reservation_time,
     )
     if not res:
         raise HTTPException(status_code=400, detail="Reservation failed")
-    return {"status": "success", "id": res.id}
+    return {"status": "success", "id": res["id"]}
 
 
-@router.post("/reservations/{reservation_id}/cancel")
+@router.post("/{reservation_id}/cancel")
 def cancel_reservation(reservation_id: int) -> dict:
     res = service.cancel_reservation(reservation_id)
     if not res:
