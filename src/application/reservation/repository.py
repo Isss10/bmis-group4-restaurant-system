@@ -36,7 +36,7 @@ class ReservationRepository:
             )
             if not reservation:
                 return None
-            reservation.status = status  # type:ignore
+            reservation.status = status  # type: ignore
             session.flush()
             session.refresh(reservation)
             return {
