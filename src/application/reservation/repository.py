@@ -17,7 +17,6 @@ class ReservationRepository:
             session.add(reservation)
             session.flush()
             session.refresh(reservation)
-            # 在会话内把需要的字段转换为普通值返回，防止 DetachedInstanceError
             res_id = reservation.id
             res_time = reservation.reservation_time
             res_status = reservation.status
