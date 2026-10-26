@@ -44,3 +44,10 @@ class ReservationRepository:
                 "reservation_time": reservation.reservation_time,
                 "status": reservation.status,
             }
+            session.flush()
+            session.refresh(reservation)
+            return {
+                "id": reservation.id,
+                "reservation_time": reservation.reservation_time,
+                "status": reservation.status,
+            }

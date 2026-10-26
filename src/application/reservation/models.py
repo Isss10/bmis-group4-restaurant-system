@@ -19,5 +19,7 @@ class Reservation(Base):
     user_id = Column(String(50), nullable=False)
     table_id = Column(Integer, nullable=False)
     reservation_time = Column(DateTime, nullable=False)
-    status = Column(Enum(ReservationStatus), default=ReservationStatus.PENDING, nullable=False)
+    status: Column[ReservationStatus] = Column(
+        Enum(ReservationStatus), default=ReservationStatus.PENDING, nullable=False
+    )
     created_at = Column(DateTime, default=datetime.utcnow)
