@@ -21,7 +21,7 @@ from sqlalchemy import engine_from_config, pool
 
 from src.common.config import get_settings
 from src.data.database import Base
-from src.data.schema import DishRatingStats, Review, ReviewModeration  # noqa: F401
+from src.data.model_discovery import import_all_models
 
 # Alembic's Config object, giving access to alembic.ini values.
 config = context.config
@@ -31,39 +31,15 @@ if config.config_file_name is not None:
 
 logger = logging.getLogger("alembic.env")
 
-# Every model module must be imported before autogenerate runs, otherwise
-# Alembic cannot see the tables and will generate a migration that DROPS them.
+# Every mapped model must be imported before autogenerate runs, otherwise
+# Alembic cannot see the table and generates a migration that DROPS it.
 #
-# ⚠️ IMPORTANT FOR THE TEAM: when you add a model in src/data/schema/ or inside
-# a module, import that module here. A model that is not imported is invisible
-# to autogenerate, and the resulting migration will try to delete its table.
-_IMPORT_MODEL_MODULES: tuple[str, ...] = (
-    # `AuditLog` lives in src/common/audit.py rather than src/data/schema/,
-    # because the services that write audit rows import the helper from there.
-    # It is still a mapped model on `Base`, so it must be registered here or
-    # autogenerate will emit a migration that DROPS audit_logs.
-    "src.common.audit",
-    # Example — uncomment as each module's models are implemented:
-    # "src.data.schema.reservation",
-    # "src.data.schema.ordering",
-    # "src.data.schema.membership",
-    # "src.data.schema.review",
-    # "src.data.schema.analytics",
-)
-
-
-def _import_models() -> None:
-    """Import model modules so Base.metadata is fully populated."""
-    import importlib
-
-    for module_name in _IMPORT_MODEL_MODULES:
-        try:
-            importlib.import_module(module_name)
-        except ModuleNotFoundError:
-            logger.warning("Model module not implemented yet: %s", module_name)
-
-
-_import_models()
+# This used to be a hand-maintained tuple of module names, and that design let
+# two models ship with no migration (audit_logs, then reservations). Importing
+# every module under src/ removes the failure mode entirely: there is no list to
+# forget to update. See src/data/model_discovery.py for the rationale and for
+# what happens when a module cannot be imported (it raises, never skips).
+import_all_models()
 
 # The complete schema Alembic compares against the live database.
 target_metadata = Base.metadata

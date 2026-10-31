@@ -25,7 +25,6 @@ and stops guarding anything.
 
 from __future__ import annotations
 
-import ast
 from argparse import Namespace
 from pathlib import Path
 
@@ -35,12 +34,8 @@ from alembic.config import Config
 from alembic.script import ScriptDirectory
 from sqlalchemy import Engine, create_engine, inspect
 
-# Import the model modules so Base.metadata is fully populated. Anything not
-# imported here is invisible to this test AND to Alembic's autogenerate — which
-# is exactly how the original bug stayed hidden. Add new model modules here.
 from src.common.audit import AuditLog
-from src.data.database import Base
-from src.data.schema import DishRatingStats, Review, ReviewModeration  # noqa: F401
+from src.data.model_discovery import discover_mapped_tables
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _MIGRATION_DIR = _REPO_ROOT / "src" / "data" / "migration"
@@ -48,10 +43,6 @@ _ENV_PY = _MIGRATION_DIR / "env.py"
 
 # Tables that legitimately exist in a database but are not application models.
 _IGNORED_TABLES = frozenset({"alembic_version"})
-
-# The module that must be registered in env.py for AuditLog to be visible to
-# autogenerate. Checked as a literal so the test fails if someone removes it.
-_AUDIT_MODEL_MODULE = "src.common.audit"
 
 
 def _alembic_config(url: str) -> Config:
@@ -87,32 +78,31 @@ def _migrated_tables(url: str) -> set[str]:
 
 
 def _declared_tables() -> set[str]:
-    """Tables implied by the mapped models imported at the top of this file."""
-    return set(Base.metadata.tables) - _IGNORED_TABLES
+    """Tables declared by every mapped model under ``src/``.
 
-
-def _registered_model_modules() -> set[str]:
-    """Read ``_IMPORT_MODEL_MODULES`` from env.py by parsing it as an AST.
-
-    ``env.py`` cannot be imported directly: it calls ``context.config`` at
-    module level, which only exists while Alembic is running, so importing it
-    from a test raises AttributeError. Parsing the literal keeps the check real
-    (an actual list entry, not a substring that could match a comment) without
-    executing the module.
+    Discovered by walking the filesystem (see ``src.data.model_discovery``), not
+    by an import list maintained in this file. The previous version kept such a
+    list and missed ``reservations``, so this guard passed while the table had no
+    migration. ``env.py`` now calls the same function, so the two cannot drift.
     """
-    tree = ast.parse(_ENV_PY.read_text(encoding="utf-8"))
-    for node in ast.walk(tree):
-        if isinstance(node, ast.AnnAssign) and getattr(node.target, "id", None) == (
-            "_IMPORT_MODEL_MODULES"
-        ):
-            value = node.value
-            if isinstance(value, ast.Tuple):
-                return {
-                    element.value
-                    for element in value.elts
-                    if isinstance(element, ast.Constant) and isinstance(element.value, str)
-                }
-    return set()
+    return discover_mapped_tables() - _IGNORED_TABLES
+
+
+def _env_py_calls_import_all_models() -> bool:
+    """Does ``env.py`` actually call ``import_all_models()``?
+
+    Read from source rather than imported: ``env.py`` accesses ``context.config``
+    at module level, which only exists while Alembic is running, so importing it
+    from a test raises AttributeError. A whole-line match is used so a mention in
+    a comment cannot satisfy the check.
+    """
+    for line in _ENV_PY.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            continue
+        if stripped == "import_all_models()":
+            return True
+    return False
 
 
 class TestMigrationCompleteness:
@@ -128,8 +118,8 @@ class TestMigrationCompleteness:
             f"{missing}. A database built with `alembic upgrade head` will raise "
             f"'no such table' at runtime while unit tests still pass, because "
             f"conftest.py uses Base.metadata.create_all(). Add a migration under "
-            f"src/data/migration/versions/ and register the model module in "
-            f"_IMPORT_MODEL_MODULES in src/data/migration/env.py."
+            f"src/data/migration/versions/. No import list needs updating — "
+            f"models are discovered automatically by src/data/model_discovery.py."
         )
 
     def test_no_orphan_tables_from_migrations(self, tmp_path: Path) -> None:
@@ -137,10 +127,10 @@ class TestMigrationCompleteness:
         orphans = sorted(_migrated_tables(_scratch_url(tmp_path, "orphans")) - _declared_tables())
         assert not orphans, (
             f"Tables created by a migration but declared by no mapped model: "
-            f"{orphans}. Either the model module is missing from the imports at "
-            f"the top of this file and from _IMPORT_MODEL_MODULES in "
-            f"src/data/migration/env.py, or the migration is stale and should be "
-            f"replaced by a downgrade."
+            f"{orphans}. Either the model no longer inherits from "
+            f"src.data.database.Base, or the migration is stale and should be "
+            f"replaced by a downgrade. Models are discovered automatically, so "
+            f"there is no import list to update."
         )
 
     def test_audit_logs_specifically_is_migrated(self, tmp_path: Path) -> None:
@@ -170,21 +160,47 @@ class TestMigrationChain:
             f"branches with `alembic merge`."
         )
 
-    def test_audit_model_registered_for_autogenerate(self) -> None:
-        """``env.py`` must know about the audit model.
+    def test_migration_env_uses_automatic_model_discovery(self) -> None:
+        """``env.py`` must import every model automatically, not via a list.
 
-        Autogenerate diffs ``target_metadata`` against the live database. A
-        model that is not imported is absent from that metadata, so the next
-        ``alembic revision --autogenerate`` emits a migration that **drops**
-        ``audit_logs`` — destroying the audit trail. ``env.py`` warns about this
-        in a comment; this test enforces the warning.
+        Autogenerate diffs ``target_metadata`` against the live database. A model
+        that is not imported is absent from that metadata, so the next
+        ``alembic revision --autogenerate`` emits a migration that **drops** its
+        table. The old design kept a hand-written module tuple here and missed
+        two models in six days. This test fails if ``env.py`` stops calling
+        ``import_all_models()``, so the automatic path cannot be silently
+        reverted to a list someone forgets to update.
         """
-        registered = _registered_model_modules()
-        assert _AUDIT_MODEL_MODULE in registered, (
-            f"'{_AUDIT_MODEL_MODULE}' is missing from _IMPORT_MODEL_MODULES in "
-            f"src/data/migration/env.py. AuditLog would be invisible to "
-            f"autogenerate, and a generated migration would DROP audit_logs. "
-            f"Currently registered: {sorted(registered) or '(none)'}"
+        assert _env_py_calls_import_all_models(), (
+            "src/data/migration/env.py no longer calls import_all_models() on its "
+            "own line. Models would once again depend on a hand-maintained import "
+            "list, which is exactly how audit_logs and reservations shipped with no "
+            "migration. Restore the call to src.data.model_discovery.import_all_models()."
+        )
+
+    def test_every_mapped_table_is_discovered(self, tmp_path: Path) -> None:
+        """The known tables must all appear in discovery.
+
+        A cheap tripwire: if discovery ever silently returns an empty or partial
+        set (for example the walk starts excluding too much), the completeness
+        test above would pass vacuously because declared ⊆ migrated becomes
+        trivially true. Asserting the concrete expected tables are present keeps
+        the guard honest.
+        """
+        declared = _declared_tables()
+        expected = {
+            "audit_logs",
+            "reservations",
+            "reviews",
+            "review_moderation",
+            "dish_rating_stats",
+        }
+        absent = sorted(expected - declared)
+        assert not absent, (
+            f"Model discovery did not find these expected tables: {absent}. "
+            f"Discovery walks src/ automatically; a missing table here means a "
+            f"model stopped inheriting from src.data.database.Base, or the walk "
+            f"is excluding its module. Found: {sorted(declared)}"
         )
 
     @pytest.mark.parametrize("label", ["upgrade", "downgrade"])
