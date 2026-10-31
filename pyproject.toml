@@ -106,6 +106,12 @@ no_implicit_optional = true
 check_untyped_defs = true
 disallow_incomplete_defs = true
 disallow_untyped_decorators = true
+# Catches code that can never execute. This is not hypothetical: PR #3 merged
+# ReservationRepository.update_status() with a duplicated flush/refresh/return
+# block after its first return, and nothing else in the pipeline noticed.
+# `mypy --warn-unreachable` flagged it immediately. Verified clean across all of
+# src/ before enabling, so it does not break existing modules.
+warn_unreachable = true
 ignore_missing_imports = true
 show_error_codes = true
 pretty = true
@@ -168,9 +174,21 @@ source = ["src"]
 precision = 1
 show_missing = true
 skip_covered = false
-# Non-blocking informational floor. Raise `fail_under` before final submission
-# once the modules are implemented — see docs/testing/.
-fail_under = 0
+# Blocking floor. This was 0 — a floor that cannot fail is not a floor, and the
+# comment that said "raise before final submission" had been sitting there since
+# the repository was scaffolded while PRs merged with modules at 0% coverage.
+#
+# 80 is a ratchet, not a target: the unit job measured 86.4% when this was set,
+# so it leaves ~6 points of headroom for a teammate to land a new module before
+# its tests. Raise it (never lower it) whenever the suite comfortably clears a
+# higher number.
+#
+# ⚠️ The integration job must keep passing --cov-fail-under=0 explicitly. With a
+# floor set here, an empty tests/integration directory exits 1 (coverage failure)
+# instead of 5 (no tests collected), which defeats the "exit 5 is a notice"
+# tolerance below and would fail every pull request. Verified both codes by
+# running pytest directly before setting this.
+fail_under = 80
 exclude_lines = [
   "pragma: no cover",
   "raise NotImplementedError",

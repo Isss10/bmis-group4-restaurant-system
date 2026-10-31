@@ -306,6 +306,104 @@ jobs:
             "SELECT @@transaction_isolation, @@innodb_default_row_format, @@sql_mode;" || \
             echo "::warning::Could not read MySQL server variables"
 
+      # -------------------------------------------------------------------------
+      # Run the REAL migration chain against REAL MySQL 8.
+      #
+      # This step did not exist before, and its absence is why two separate
+      # "model with no migration" defects reached main:
+      #
+      #   * audit_logs   — model in src/common/audit.py, no migration
+      #   * reservations — model merged in PR #3, no migration
+      #
+      # Both were invisible to every other gate. Unit tests build their schema
+      # with Base.metadata.create_all(), which creates tables that have no
+      # migration, so a missing migration can never fail a unit test. And the
+      # word "alembic" appeared in this file exactly once, in a comment: no job
+      # ever executed one. Deployment runs `alembic upgrade head` (see
+      # deploy/docker/docker-compose.yml), so the pipeline was validating a
+      # different schema path than production uses.
+      #
+      # It runs here rather than in test-unit because MySQL 8 is the dialect the
+      # ENUM columns and the reserved-word `before`/`after` columns are actually
+      # rendered for. SQLite cannot exercise them.
+      # -------------------------------------------------------------------------
+      - name: Apply migrations to a real MySQL 8 database
+        env:
+          APP_ENVIRONMENT: testing
+          APP_JWT_SECRET_KEY: ${{ github.run_id }}-${{ github.sha }}-ci-only-not-a-real-secret
+          APP_DB_HOST: 127.0.0.1
+          APP_DB_PORT: "3306"
+          APP_DB_USER: root
+          APP_DB_PASSWORD: ci-root-password
+          APP_DB_NAME: restaurant_test
+        run: |
+          set -e
+          echo "Applying the full migration chain from an empty database..."
+          alembic upgrade head
+
+          echo
+          echo "Tables now present:"
+          mysql -h 127.0.0.1 -P 3306 -uroot -pci-root-password -N -B restaurant_test \
+            -e "SHOW TABLES;"
+
+          echo
+          echo "Asserting every application table exists after migration..."
+          MISSING=0
+          for t in audit_logs reservations reviews review_moderation dish_rating_stats; do
+            FOUND=$(mysql -h 127.0.0.1 -P 3306 -uroot -pci-root-password -N -B restaurant_test \
+              -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='restaurant_test' AND table_name='$t';")
+            if [ "$FOUND" != "1" ]; then
+              echo "::error::table '$t' is declared by a model but was not created by the migration chain"
+              MISSING=1
+            fi
+          done
+          if [ "$MISSING" -ne 0 ]; then
+            echo "A model without a migration fails at runtime with 'no such table',"
+            echo "while unit tests stay green. Add the migration under"
+            echo "src/data/migration/versions/."
+            exit 1
+          fi
+          echo "OK: the migration chain produces every declared table."
+
+          echo
+          echo "Verifying the chain rolls back cleanly (deployment must be reversible)..."
+          alembic downgrade base
+          alembic upgrade head
+
+      - name: Check for model/migration drift (non-blocking)
+        continue-on-error: true
+        env:
+          APP_ENVIRONMENT: testing
+          APP_JWT_SECRET_KEY: ${{ github.run_id }}-${{ github.sha }}-ci-only-not-a-real-secret
+          APP_DB_HOST: 127.0.0.1
+          APP_DB_PORT: "3306"
+          APP_DB_USER: root
+          APP_DB_PASSWORD: ci-root-password
+          APP_DB_NAME: restaurant_test
+        run: |
+          # `alembic check` fails when autogenerate would produce changes, i.e.
+          # when a model and its migration have drifted apart. That is the exact
+          # defect class this job exists to catch, so it belongs here.
+          #
+          # It is deliberately NON-blocking for now. env.py enables
+          # compare_server_default and compare_type, and MySQL autogenerate is
+          # known to report spurious differences for server defaults and ENUM
+          # rendering. Making it blocking without confirming a clean baseline
+          # would fail every pull request for no real reason.
+          #
+          # TO PROMOTE THIS TO BLOCKING: remove continue-on-error above once a
+          # run shows no drift on an unmodified main. If drift appears then, it
+          # is real and must be fixed with a migration.
+          set +e
+          alembic check
+          CODE=$?
+          set -e
+          if [ "$CODE" -ne 0 ]; then
+            echo "::warning::Model and migration have drifted, or MySQL autogenerate reported a spurious difference. Inspect the output above."
+            exit "$CODE"
+          fi
+          echo "OK: no model/migration drift."
+
       - name: Run integration and concurrency tests
         env:
           APP_ENVIRONMENT: testing
@@ -321,10 +419,19 @@ jobs:
           # fail the pipeline and block every pull request. Treat 5 as a notice;
           # any other non-zero code is a real failure and still fails the job.
           # Remove this tolerance once the concurrency tests land (Objective d).
+          #
+          # --cov-fail-under=0 is REQUIRED while the directories are empty.
+          # pyproject.toml sets a global `fail_under = 80`, and with a floor set,
+          # "no tests collected" exits 1 (coverage 0% < 80) instead of 5 — so the
+          # tolerance below would never trigger and every pull request would
+          # fail. Overriding the floor for this job only keeps exit code 5
+          # meaningful. The floor is enforced by the test-unit job, which is
+          # where the coverage actually comes from.
           set +e
           pytest tests/integration tests/concurrency \
             -m "integration or concurrency" \
             --cov=src --cov-report=term-missing --cov-report=xml:coverage/integration.xml \
+            --cov-fail-under=0 \
             --junitxml=reports/integration.xml
           CODE=$?
           set -e
