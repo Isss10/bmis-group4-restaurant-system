@@ -2,7 +2,7 @@
 
 **Scope:** backend `src/` and deployment `deploy/`.
 **Audience:** the group, and whoever assesses Objective (f).
-**Last verified:** 2026-10-25, against branch `fix/audit-logs-migration`.
+**Last verified:** 2026-10-31, against branch `fix/audit-logs-migration`.
 
 Every row below states **where the control lives** and **how it was verified**.
 Nothing here is aspirational: the ✅ rows were confirmed by running the code or
@@ -21,7 +21,7 @@ reading the exact file, and the ❌ rows are known gaps with an owner and a date
 | A05 | Security Misconfiguration | ✅ Done | Production boot refuses weak secrets and wildcard CORS; docs disabled in production |
 | A06 | Vulnerable & Outdated Components | ✅ Done | `pip-audit --strict` and Bandit in CI on every pull request |
 | A07 | Identification & Authentication Failures | ⚠️ Partial | JWT issued and verified; **no rate limiting on login** |
-| A08 | Software & Data Integrity Failures | ✅ Done | Alembic migrations only; migration-completeness guard in the unit job |
+| A08 | Software & Data Integrity Failures | ✅ Done | Alembic migrations only; real chain now runs in CI against MySQL 8; auto-discovered migration-completeness guard |
 | A09 | Security Logging & Alerting Failures | ✅ Done | `audit_logs` table + `record_audit()` with credential redaction |
 | A10 | Server-Side Request Forgery | ➖ Not applicable | No outbound URL fetching anywhere in `src/` |
 
@@ -247,12 +247,24 @@ far tighter (a few attempts per minute per IP), and review submission needs the
   tests, never in deployment.
 - `deploy/docker/docker-compose.yml` runs `alembic upgrade head` at container
   start, so a deployed image cannot run against a schema it did not create.
-- **New as of this commit:** `tests/unit/test_migration_completeness.py` runs the
-  real migration chain against a scratch SQLite database and compares the result
-  with `Base.metadata` in both directions — a model with no migration fails the
-  unit job, and a stale migration that no model declares also fails. It also
-  asserts a single migration head, that `src.common.audit` is registered for
-  autogenerate, and that the chain survives up → down-to-base → up.
+- `tests/unit/test_migration_completeness.py` runs the real migration chain
+  against a scratch SQLite database and compares the result with the mapped
+  models in both directions — a model with no migration fails the unit job, and
+  a stale migration that no model declares also fails. It also asserts a single
+  migration head, that every expected table is actually discovered, and that the
+  chain survives up → down-to-base → up.
+- **Models are discovered automatically**, not from a hand-maintained list.
+  `src/data/model_discovery.py` walks `src/` and imports every module, so
+  `env.py` (Alembic autogenerate) and the guard test share one discovery path
+  and cannot disagree. Adding a model now needs no edit anywhere. Import
+  failures raise rather than skip: a model that cannot be imported is invisible
+  to autogenerate, which then emits a migration that **drops** its table.
+- **CI now runs the real migration chain against MySQL 8** (the `test-integration`
+  job), asserting every declared table exists and that the chain downgrades and
+  re-upgrades. Before this, the word "alembic" appeared in `ci.yml` only in a
+  comment — no job ever executed one, which is why the two defects below reached
+  `main` with a green pipeline. A non-blocking `alembic check` drift step sits
+  alongside it; promote it to blocking once a run shows a clean baseline.
 - The committed `docs/api/openapi.json` currently matches the generated document
   **byte for byte** — verified on 2026-10-25 by calling `create_app().openapi()`
   and comparing the JSON. There is **no CI check** for this, so the two can drift
@@ -264,12 +276,15 @@ far tighter (a few attempts per minute per IP), and review submission needs the
 - The `hygiene` job validates pull-request titles and commit messages against
   the conventional commit format, and blocks large files that belong outside Git.
 
-**Why the guard exists:** `audit_logs` shipped with a model and no migration.
-Every `record_audit()` call raised `no such table: audit_logs` on a migrated
-database — but the suite stayed green, because `conftest.py` builds its schema
-with `create_all()` and no CI job ran a migration. The guard was
-mutation-tested: deleting migration `0002` fails 4 tests; removing
-`src.common.audit` from `_IMPORT_MODEL_MODULES` fails 3.
+**Why the guard exists:** two models shipped with no migration, six days apart —
+`audit_logs` (in `src/common/audit.py`) and `reservations` (merged in PR #3).
+Every write then raised `no such table` on a migrated database, but the suite
+stayed green because `conftest.py` builds its schema with `create_all()` and no
+CI job ran a migration. The first guard missed `reservations` because model
+discovery was a hand-maintained import list that omitted it — the same root cause
+that hid the model from autogenerate. Discovery is now automatic, and the guard
+was mutation-tested: deleting either migration fails the suite, and making a
+model inherit from a different `Base` (invisible to discovery) fails it too.
 
 ---
 
@@ -340,15 +355,20 @@ Three items, each with an owner and a date. Ordered by how much they block.
 | 2 | **Rate limiting not wired.** `slowapi` is installed and limits are configured, but no `Limiter` is attached to the app. Do this on the contract branch to avoid a guaranteed conflict in `main.py`. | A07 | **Member1** | with gap 1 |
 | 3 | `feature/staff-backend-api` declares **four routes with no authentication dependency** and its four service methods are `pass` stubs. The routes are not registered in `main.py` today (they 404), so the exposure is latent — but it goes live the moment the router is wired in. | A01 | **M2 (YAN ZHOU)** | before merge |
 
-Two smaller items that do not block a merge:
+Two smaller items — one now closed, one still open:
 
-- **Coverage floor is 0.** `pyproject.toml` has `fail_under = 0` with a comment
-  saying to raise it before final submission. Actual coverage is 86.7%. Set it
-  to 80 so a regression cannot slip through unnoticed.
-- **`tests/integration/` and `tests/concurrency/` are empty.** CI tolerates the
-  resulting exit code 5 with an explicit comment, so the pipeline is not broken
-  — but the concurrency test that proves lost-update prevention is an Objective
-  (d) deliverable due 30 Nov, and it does not exist yet.
+- **Coverage floor: closed this round.** `pyproject.toml` now sets
+  `fail_under = 80` (was 0 — a floor that cannot fail). The unit job measures
+  86.4%, and merging `feature/contract-alignment` keeps it at 86.1%, so the
+  floor does not block the stranded contract branch. The `test-integration` job
+  passes `--cov-fail-under=0` explicitly, because with a global floor an empty
+  `tests/integration/` would exit 1 (0% coverage) instead of 5 (no tests
+  collected) and fail every pull request. Treat 80 as a ratchet: raise it as the
+  suite comfortably clears higher numbers, never lower it.
+- **`tests/integration/` and `tests/concurrency/` are still empty.** CI tolerates
+  the resulting exit code 5 with an explicit comment, so the pipeline is not
+  broken — but the concurrency test that proves lost-update prevention is an
+  Objective (d) deliverable due 30 Nov, and it does not exist yet.
 
 ---
 
