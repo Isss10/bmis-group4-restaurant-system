@@ -292,3 +292,13 @@ Re-run that after any change to a route, and commit the result — the archived
 
 Module-level setup details (per-module environment variables, seeding data) will
 be added to [`docs/user-manual/`](docs/user-manual/) as the prototype takes shape.
+
+### Membership authentication (Member10 / T4)
+
+Registration/login, revocable refresh sessions, four-role authorisation and
+administrator account management are implemented in the membership auth slice.
+The standalone Vue entry is `src/presentation/membership/`; it does not replace
+the ordering page. Apply `alembic upgrade head`, then bootstrap the first admin
+**before public registration**. See the [setup and operating guide](docs/user-manual/MEMBERSHIP_AUTH.md)
+and [API contract](docs/api/MEMBERSHIP_AUTH.md). Member4's points, tiers and coupon
+business logic remains a separate delivery; the auth page does not invent balances.

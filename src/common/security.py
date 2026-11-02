@@ -27,6 +27,7 @@ from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from passlib.context import CryptContext
 from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
 
 from src.common.config import Settings, get_settings
 from src.common.errors import ErrorCode, permission_denied, unauthenticated
@@ -148,6 +149,9 @@ class TokenPayload(BaseModel):
 
     jti: str
     """Unique token id, so a leaked token can be revoked by id if needed."""
+
+    sid: str | None = None
+    auth_version: int | None = None
 
 
 class TokenPair(BaseModel):
@@ -283,7 +287,11 @@ async def get_current_token(
         # No Authorization header, or an empty Bearer value: nothing to check.
         raise unauthenticated(ErrorCode.CREDENTIALS_MISSING)
     try:
-        payload = decode_access_token(credentials.credentials)
+        cfg = getattr(request.app.state, "settings", None)
+        payload = decode_access_token(credentials.credentials, settings=cfg)
+        validator = getattr(request.app.state, "auth_validator", None)
+        if validator is not None:
+            await run_in_threadpool(validator, payload)
     except InvalidTokenError:
         # A header was supplied but did not verify: malformed, forged, expired,
         # or carrying an unknown role. The specific reason stays in the server log
