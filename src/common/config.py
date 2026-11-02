@@ -78,6 +78,7 @@ class Settings(BaseSettings):
     jwt_secret_key: str = Field(default="", repr=False, exclude=True)
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = Field(default=60, ge=1, le=1440)
+    refresh_token_expire_days: int = Field(default=7, ge=1, le=30)
     # Tokens are truncated to this many characters when logged, so a leaked log
     # never contains a usable credential.
     token_log_preview_chars: int = Field(default=8, ge=0, le=32)

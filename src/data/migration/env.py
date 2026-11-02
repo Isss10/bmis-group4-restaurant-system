@@ -38,6 +38,8 @@ logger = logging.getLogger("alembic.env")
 # a module, import that module here. A model that is not imported is invisible
 # to autogenerate, and the resulting migration will try to delete its table.
 _IMPORT_MODEL_MODULES: tuple[str, ...] = (
+    "src.common.audit",
+    "src.data.schema.membership",
     # Example — uncomment as each module's models are implemented:
     # "src.data.schema.reservation",
     # "src.data.schema.ordering",

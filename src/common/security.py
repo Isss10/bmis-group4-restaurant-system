@@ -27,6 +27,7 @@ from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from passlib.context import CryptContext
 from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
 
 from src.common.config import Settings, get_settings
 
@@ -135,6 +136,9 @@ class TokenPayload(BaseModel):
 
     jti: str
     """Unique token id, so a leaked token can be revoked by id if needed."""
+
+    sid: str | None = None
+    auth_version: int | None = None
 
 
 class TokenPair(BaseModel):
@@ -254,7 +258,11 @@ async def get_current_token(
     if credentials is None or not credentials.credentials:
         _unauthorised("Not authenticated")
     try:
-        payload = decode_access_token(credentials.credentials)
+        cfg = getattr(request.app.state, "settings", None)
+        payload = decode_access_token(credentials.credentials, settings=cfg)
+        validator = getattr(request.app.state, "auth_validator", None)
+        if validator is not None:
+            await run_in_threadpool(validator, payload)
     except InvalidTokenError:
         _unauthorised("Not authenticated")
     # Attach the identity to the request so audit logging can attribute the

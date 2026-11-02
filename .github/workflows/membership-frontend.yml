@@ -1,0 +1,36 @@
+name: Membership frontend
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/presentation/membership/**"
+      - ".github/workflows/membership-frontend.yml"
+  push:
+    branches: [main]
+    paths:
+      - "src/presentation/membership/**"
+      - ".github/workflows/membership-frontend.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  membership-ui:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/presentation/membership
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Enable pinned pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.25.0 --activate
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm type-check
+      - run: pnpm test:unit
+      - run: pnpm build

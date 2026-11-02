@@ -344,7 +344,7 @@ def register_middleware(app: FastAPI, settings: Settings | None = None) -> None:
         allow_credentials=not allow_all_origins,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         # Expose the request id so the frontend can show it in error dialogs.
-        allow_headers=["Authorization", "Content-Type", REQUEST_ID_HEADER],
+        allow_headers=["Authorization", "Content-Type", "X-CSRF-Token", REQUEST_ID_HEADER],
         expose_headers=[REQUEST_ID_HEADER],
         max_age=600,
     )
