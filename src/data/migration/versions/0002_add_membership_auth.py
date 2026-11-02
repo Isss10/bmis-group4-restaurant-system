@@ -161,9 +161,9 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     # Audit history intentionally survives rollback of the module that wrote it.
-    op.drop_index(op.f("ix_used_refresh_tokens_session_id"), table_name="used_refresh_tokens")
+    # InnoDB requires these indexes while the foreign keys exist. Dropping each
+    # child table removes its indexes and constraints together.
     op.drop_table("used_refresh_tokens")
-    op.drop_index(op.f("ix_auth_sessions_user_id"), table_name="auth_sessions")
     op.drop_table("auth_sessions")
     op.drop_table("auth_policy_lock")
     op.drop_table("users")
