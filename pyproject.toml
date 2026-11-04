@@ -142,6 +142,14 @@ addopts = [
   "--tb=short",
 ]
 asyncio_mode = "auto"
+# Required from pytest-asyncio 1.4 onward: it emits a PytestDeprecationWarning
+# during pytest_configure when this option is unset. Because filterwarnings
+# below is ["error"], that warning was raised as an error inside the configure
+# hook, producing a pytest INTERNALERROR (exit code 3) that failed the whole
+# unit-test and integration jobs before a single test ran. Setting the scope
+# explicitly silences the warning at its source rather than suppressing it, and
+# "function" matches how every async fixture in this suite is used today.
+asyncio_default_fixture_loop_scope = "function"
 markers = [
   "unit: fast isolated tests with no external dependencies",
   "integration: tests that need a database or the full app",
