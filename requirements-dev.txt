@@ -10,11 +10,23 @@
 # Ceilings that sit below a security fix make `pip-audit --strict` fail CI on
 # every pull request, which trains the team to ignore a red pipeline.
 pytest>=9.0.3,<10.0
-pytest-asyncio>=1.0,<2.0          # 1.x avoids the asyncio.get_event_loop_policy()
+pytest-asyncio>=1.4,<2.0          # 1.x avoids the asyncio.get_event_loop_policy()
                                   # DeprecationWarning that 0.25.x raises on
                                   # Python 3.12+; this suite runs with
                                   # filterwarnings=["error"], so 0.25.x would fail
                                   # every test at setup on a modern interpreter.
+                                  # NOTE: 1.4.x added its OWN deprecation warning
+                                  # (asyncio_default_fixture_loop_scope unset) which,
+                                  # under filterwarnings=["error"], raised inside
+                                  # pytest_configure and INTERNALERROR'd both the
+                                  # unit and integration jobs (exit code 3) — CI was
+                                  # red for the whole team with no source change.
+                                  # Fixed by setting that option in pyproject.toml.
+                                  # The lesson: under warnings-as-errors, a floating
+                                  # dependency range can break CI on its own. When a
+                                  # test tool emits a new deprecation, pin past it and
+                                  # set the option it asks for; do not just widen the
+                                  # ignore list.
 pytest-cov>=5.0,<7.0              # coverage reports (Objective f)
 coverage[toml]>=7.4,<8.0
 # starlette >=1.7 TestClient imports httpx2 first and only falls back to httpx

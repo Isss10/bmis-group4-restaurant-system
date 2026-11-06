@@ -44,10 +44,13 @@ services:
       # 3-byte `utf8` silently corrupts them.
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
-      # REPEATABLE READ is MySQL's default and what src/data/database.py sets
-      # per-session. Declaring it here makes the guarantee explicit rather than
-      # incidental to a version default.
-      - --transaction-isolation=REPEATABLE-READ
+      # READ COMMITTED is what the frozen contract (manual §5.3) requires and
+      # what src/data/database.py sets per-session. Declaring it at the server
+      # level too means a raw `mysql` client or a migration run outside the app
+      # sees the same guarantee the application does, rather than MySQL's
+      # default REPEATABLE READ. See the database.py module docstring for why
+      # the three-layer booking defence still holds at this level.
+      - --transaction-isolation=READ-COMMITTED
       # Strict mode: reject out-of-range and malformed values instead of
       # truncating them silently. Silent truncation of a booking's guest count
       # is exactly the class of bug this project exists to prevent.

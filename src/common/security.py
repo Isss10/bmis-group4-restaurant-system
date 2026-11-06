@@ -20,15 +20,16 @@ import secrets
 from collections.abc import Callable, Coroutine
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
-from typing import Annotated, Any, NoReturn
+from typing import Annotated, Any
 
 import jwt
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from passlib.context import CryptContext
 from pydantic import BaseModel
 
 from src.common.config import Settings, get_settings
+from src.common.errors import ErrorCode, permission_denied, unauthenticated
 
 # ---------------------------------------------------------------------------
 # Roles
@@ -68,7 +69,19 @@ ANALYTICS_VIEWERS: frozenset[Role] = frozenset({Role.MANAGER, Role.ADMIN})
 # that. We reject longer passwords instead of silently weakening them.
 _BCRYPT_MAX_BYTES = 72
 
-_pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# The frozen contract (manual section 4.4) requires "bcrypt, cost >= 12".
+# passlib's default happens to be 12 today, but a default is not a guarantee:
+# pinning it makes the contract enforced by code rather than incidentally true,
+# and keeps `password_needs_rehash` meaningful -- if the group later decides on
+# cost 13, raising this single constant makes every cost-12 hash self-report as
+# needing an upgrade on next login instead of silently staying weak.
+_BCRYPT_MIN_ROUNDS = 12
+
+_pwd_context = CryptContext(
+    schemes=["bcrypt"],
+    deprecated="auto",
+    bcrypt__rounds=_BCRYPT_MIN_ROUNDS,
+)
 
 
 def hash_password(plain_password: str) -> str:
@@ -250,13 +263,33 @@ async def get_current_token(
     request: Request,
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer_scheme)] = None,
 ) -> TokenPayload:
-    """Extract and verify the bearer token from the Authorization header."""
+    """Extract and verify the bearer token from the Authorization header.
+
+    The three failure modes are deliberately distinguished, because the frozen
+    contract (manual section 4.3) assigns them different codes and the frontend
+    reacts differently to each:
+
+    * no header at all          -> 30001 CREDENTIALS_MISSING  (redirect to login)
+    * header present but unusable -> 30002 CREDENTIALS_INVALID (token expired or
+      forged; clear it and re-login)
+
+    Collapsing the two would make the client unable to tell "you never logged in"
+    from "your session lapsed", and would lose the distinction the contract
+    exists to provide. Note the asymmetry with authorisation: a *valid* token
+    with the wrong role is 30003/403, not 401 — the caller is known, just not
+    permitted (OWASP A01).
+    """
     if credentials is None or not credentials.credentials:
-        _unauthorised("Not authenticated")
+        # No Authorization header, or an empty Bearer value: nothing to check.
+        raise unauthenticated(ErrorCode.CREDENTIALS_MISSING)
     try:
         payload = decode_access_token(credentials.credentials)
     except InvalidTokenError:
-        _unauthorised("Not authenticated")
+        # A header was supplied but did not verify: malformed, forged, expired,
+        # or carrying an unknown role. The specific reason stays in the server log
+        # (decode_access_token logs it) and is NOT leaked to the client, since
+        # distinguishing "expired" from "bad signature" is useful reconnaissance.
+        raise unauthenticated(ErrorCode.CREDENTIALS_INVALID) from None
     # Attach the identity to the request so audit logging can attribute the
     # action without threading the payload through every service call.
     request.state.current_user_id = payload.sub
@@ -265,19 +298,15 @@ async def get_current_token(
     return payload
 
 
-def _unauthorised(detail: str) -> NoReturn:
-    """Raise a 401 with the WWW-Authenticate header the RFC requires."""
-    raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail=detail,
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-
-
-def _forbidden(detail: str) -> NoReturn:
-    """Raise a 403 — authenticated, but not permitted for this resource."""
-    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
-
+# Note: there are deliberately no `_unauthorised` / `_forbidden` helpers here.
+# Authentication and authorisation failures raise `ApiError` via the frozen-code
+# constructors (`unauthenticated`, `permission_denied`) so that codes 30001,
+# 30002 and 30003 survive all the way to the client. A bare `HTTPException`
+# would only work by accident — the middleware happens to map 401/403 onto
+# 30001/30003 — and would silently lose that precision if the mapping changed.
+# The `WWW-Authenticate: Bearer` header required by RFC 6750 §3 is added by the
+# middleware for both unauthenticated codes, so nothing is lost by not raising
+# HTTPException here.
 
 CurrentUser = Annotated[TokenPayload, Depends(get_current_token)]
 """Any authenticated user. Use this when the role does not matter."""
@@ -306,7 +335,12 @@ def require_roles(*roles: Role) -> Callable[..., Coroutine[Any, Any, TokenPayloa
     ) -> TokenPayload:
         payload = await get_current_token(request, credentials)
         if payload.role not in allowed:
-            _forbidden("You do not have permission to perform this action")
+            # Raise the domain error rather than a bare HTTPException so the
+            # frozen code 30003 reaches the client. Going through HTTPException
+            # instead would work by accident today (the middleware maps 403 onto
+            # 30003), but it depends on that mapping staying in place and loses
+            # the ability to attach field-level detail.
+            raise permission_denied()
         return payload
 
     return guard

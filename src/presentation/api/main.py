@@ -22,7 +22,8 @@ from fastapi import APIRouter, FastAPI, Request, status
 from pydantic import BaseModel
 
 from src.common.config import Settings, get_settings
-from src.common.middleware import configure_logging, register_middleware
+from src.common.envelope import Envelope
+from src.common.middleware import REQUEST_ID_ATTR, configure_logging, register_middleware
 from src.common.security import CurrentUser, Role
 from src.data.database import reset_engine
 
@@ -46,8 +47,18 @@ Restaurant reservation and food-ordering system — JC2001 BMIS Group 4.
 **Authentication** — JWT bearer tokens. Click *Authorize* and paste the token
 returned by the login endpoint. Roles: `customer`, `waiter`, `manager`, `admin`.
 
-**Errors** — every error response has the shape
-`{"error": {"code": <int>, "message": <str>, "request_id": <str>}}`.
+**Envelope** — every response, success or failure, has the shape
+
+    {"code": 0, "message": "ok", "data": {...},
+     "request_id": "…", "timestamp": "2026-10-11T12:30:00Z"}
+
+`code` is **0 on success** and a 5-digit business code on failure (`20001` slot
+already booked, `30003` permission denied, `50001` internal error, …). It is not
+the HTTP status: the status tells your HTTP client what happened at the transport
+level, while `code` tells your application *which* rule was violated. Switch on
+`code`, not on the status. Failures may also carry
+`errors: [{"field": …, "detail": …}]` for field-level highlighting.
+
 Quote the `request_id` when reporting a problem; it links the response to the
 server log and to any audit record.
 """
@@ -183,16 +194,43 @@ def _build_root_router(cfg: Settings) -> APIRouter:
 
 
 def _build_health_router() -> APIRouter:
-    """Health endpoints for Docker and CI smoke tests."""
+    """Health endpoints for Docker and CI smoke tests.
+
+    Two paths are registered deliberately:
+
+    * ``/api/v1/health`` is the contract path (manual §4.1 prefix rule and the
+      Wave-1 acceptance criterion "`/api/v1/health` returns 200"). Anything
+      documented or graded uses this one.
+    * ``/health`` is the conventional location orchestrators expect. The
+      Dockerfile HEALTHCHECK and the CI docker-job smoke test both curl it, and
+      moving it would break container health reporting. It is an alias, not a
+      second implementation — one handler, two routes, so they cannot drift.
+    """
     router = APIRouter(tags=["health"])
 
+    # Two stacked decorators, not two paths in one call: `APIRouter.get()` takes
+    # exactly one positional path, so `@router.get("/a", "/b")` raises TypeError.
+    # Stacking works because FastAPI's route decorator returns the function
+    # unchanged, so the inner decorator registers `/health` and hands the same
+    # function to the outer one, which registers `/api/v1/health`. One
+    # implementation, two routes — they cannot drift apart.
     @router.get(
-        "/health",
+        "/api/v1/health",
         summary="Liveness probe",
-        response_model=HealthResponse,
+        response_model=Envelope[HealthResponse],
         status_code=status.HTTP_200_OK,
     )
-    async def health(request: Request) -> HealthResponse:
+    @router.get(
+        "/health",
+        summary="Liveness probe (alias)",
+        response_model=Envelope[HealthResponse],
+        status_code=status.HTTP_200_OK,
+        # Keep the alias out of the generated OpenAPI document: it exists for
+        # infrastructure, and documenting two health endpoints invites the
+        # frontend to use the non-contract one.
+        include_in_schema=False,
+    )
+    async def health(request: Request) -> Envelope[HealthResponse]:
         """Return process liveness without touching the database.
 
         Kept dependency-free on purpose: when MySQL is down we still want the
@@ -202,13 +240,23 @@ def _build_health_router() -> APIRouter:
         Settings are read from `app.state`, not from `get_settings()`, so an app
         built with custom settings (tests) reports its own environment rather
         than the process-wide one.
+
+        Wrapped in the frozen envelope like every other endpoint (manual §4.2),
+        so the health payload is under ``data``. The container HEALTHCHECK only
+        asserts an HTTP 200, so the wrapper does not disturb it.
         """
         cfg: Settings = request.app.state.settings
-        return HealthResponse(
+        payload = HealthResponse(
             status="ok",
             app=cfg.app_name,
             version=cfg.app_version,
             environment=cfg.environment,
+        )
+        return Envelope[HealthResponse](
+            code=0,
+            message="ok",
+            data=payload,
+            request_id=getattr(request.state, REQUEST_ID_ATTR, None),
         )
 
     return router
@@ -233,46 +281,88 @@ def _build_auth_router() -> APIRouter:
     @router.get(
         "/me",
         summary="Current identity",
-        response_model=CurrentIdentity,
+        response_model=Envelope[CurrentIdentity],
         responses={
-            401: {"description": "Missing, malformed or expired token"},
+            401: {"description": "Missing (30001) or invalid/expired (30002) token"},
         },
     )
-    async def me(identity: CurrentUser) -> CurrentIdentity:
+    async def me(request: Request, identity: CurrentUser) -> Envelope[CurrentIdentity]:
         """Return the caller's id, role and token expiry.
 
         Requires a valid bearer token. Returns 401 with
-        `WWW-Authenticate: Bearer` (RFC 6750 §3) when it is absent or invalid.
+        `WWW-Authenticate: Bearer` (RFC 6750 §3) when it is absent or invalid,
+        carrying code 30001 or 30002 so the frontend can tell "never logged in"
+        from "session lapsed".
         """
-        return CurrentIdentity(
+        payload = CurrentIdentity(
             user_id=identity.sub,
             role=identity.role,
             token_id=identity.jti,
             expires_at=identity.exp,
         )
+        return Envelope[CurrentIdentity](
+            code=0,
+            message="ok",
+            data=payload,
+            request_id=getattr(request.state, REQUEST_ID_ATTR, None),
+        )
 
     return router
 
 
+# Frozen module → (router module path, base path).
+#
+# Both halves of this mapping are contract, not convention, and the two are
+# deliberately written out rather than derived:
+#
+# * **Router location** is `src/presentation/api/routers/<module>.py`, per
+#   ARCHITECTURE.md §2 (the ASCII diagram lists `api/routers/  one router per
+#   module`) and §3's dependency rule — the application tier "Must NOT import
+#   `fastapi`", so a router cannot live there. §6 names this directory as the
+#   REST API contract boundary owned by YAN ZHANG.
+# * **Base path** is spelled out because the module *directory* is singular
+#   (`reservation/`) while the frozen API path is plural
+#   (`/api/v1/reservations`, manual §4.2 "plural nouns"; also the table in
+#   `_DESCRIPTION` above and ARCHITECTURE.md §2). Deriving the prefix from the
+#   directory name produced `/api/v1/reservation` — a path no document ever
+#   advertised, so all three Vue apps would 404 while every CI job stayed
+#   green, because nothing asserted the mounted prefix.
+#
+# `tests/unit/test_router_registration.py` pins this mapping. Changing a base
+# path means changing that test *and* the documents above, in one PR.
+_MODULE_ROUTERS: dict[str, tuple[str, str]] = {
+    "reservation": ("src.presentation.api.routers.reservation", "/api/v1/reservations"),
+    "ordering": ("src.presentation.api.routers.ordering", "/api/v1/orders"),
+    "staff": ("src.presentation.api.routers.staff", "/api/v1/staff"),
+    "membership": ("src.presentation.api.routers.membership", "/api/v1/membership"),
+    "review": ("src.presentation.api.routers.review", "/api/v1/reviews"),
+    "analytics": ("src.presentation.api.routers.analytics", "/api/v1/analytics"),
+}
+
+
 def _register_module_routers(app: FastAPI) -> None:
-    """Attach each module's router under /api/v1, tolerating missing modules.
+    """Attach each module's router at its frozen base path, tolerating absences.
 
-    The five modules are being implemented in parallel by different people
-    (see README §6). A module whose router does not exist yet must not break
-    the whole application, so import failures are logged and skipped. Remove
-    the try/except once all five modules have landed and CI covers them.
+    The modules are being implemented in parallel by different people (see
+    README §6). A module whose router does not exist yet must not break the
+    whole application, so import failures are logged and skipped — that is why
+    `/health` starts even with an empty repository. Remove the try/except once
+    every module has landed and CI covers them.
+
+    A router that *exists* but is malformed is louder than one that is missing:
+    the exception is logged with a traceback rather than swallowed, because a
+    typo in a merged module should be visible in the container log.
+
+    `include_router` is inside the try as well. Importing cleanly is not the
+    same as mounting cleanly — a module that exports something which is not an
+    APIRouter (or a router with a decorator FastAPI rejects) raises here, and
+    without this the whole application fails to start: `/health` never comes
+    up, so Docker's health check fails and the container restarts in a loop.
+    One module's typo must not take the entire API down with it.
     """
-    module_paths = {
-        "reservation": "src.application.reservation.router",
-        "ordering": "src.application.ordering.router",
-        "membership": "src.application.membership.router",
-        "review": "src.application.review.router",
-        "analytics": "src.application.analytics.router",
-    }
-
     import importlib
 
-    for name, path in module_paths.items():
+    for name, (path, prefix) in _MODULE_ROUTERS.items():
         try:
             module = importlib.import_module(path)
         except ModuleNotFoundError:
@@ -287,8 +377,16 @@ def _register_module_routers(app: FastAPI) -> None:
             logger.warning("Module %s has no `router` attribute; skipped", name)
             continue
 
-        app.include_router(router, prefix=f"/api/v1/{name}", tags=[name])
-        logger.info("Registered router for module %s at /api/v1/%s", name, name)
+        try:
+            app.include_router(router, prefix=prefix, tags=[name])
+        except Exception:
+            logger.exception(
+                "Router for module %s imported but could not be mounted at %s; skipped",
+                name,
+                prefix,
+            )
+            continue
+        logger.info("Registered router for module %s at %s", name, prefix)
 
 
 # The ASGI entry point used by uvicorn and by the Dockerfile.

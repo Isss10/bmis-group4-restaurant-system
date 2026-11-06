@@ -46,6 +46,18 @@ ignore = [
   # project-wide — assert in production code is still a real bug.
 ]
 
+# RUF001/RUF002/RUF003 flag characters that look like an ASCII one but are not.
+# The frozen error messages in src/common/errors.py reproduce the Chinese wording
+# of the collaboration manual section 4.3 verbatim, and one of them legitimately
+# contains a fullwidth comma. Allowlist that exact character rather than
+# disabling the rule family: the same rules are what would catch a genuine
+# homograph (a Cyrillic "а" posing as a Latin "a" in an identifier or a URL),
+# which is a real supply-chain/phishing risk we do not want to blind ourselves to.
+# Add new entries one character at a time, with a reason — not by range.
+allowed-confusables = [
+  "，",  # FULLWIDTH COMMA (U+FF0C) — frozen contract message "数据已被其他请求修改，请刷新后重试"
+]
+
 [tool.ruff.lint.per-file-ignores]
 # Tests use assert, bare fixtures and long literal tables; that is idiomatic.
 "tests/**" = ["S101", "S105", "S106", "PLR2004"]
@@ -136,6 +148,14 @@ addopts = [
   "--tb=short",
 ]
 asyncio_mode = "auto"
+# Required from pytest-asyncio 1.4 onward: it emits a PytestDeprecationWarning
+# during pytest_configure when this option is unset. Because filterwarnings
+# below is ["error"], that warning was raised as an error inside the configure
+# hook, producing a pytest INTERNALERROR (exit code 3) that failed the whole
+# unit-test and integration jobs before a single test ran. Setting the scope
+# explicitly silences the warning at its source rather than suppressing it, and
+# "function" matches how every async fixture in this suite is used today.
+asyncio_default_fixture_loop_scope = "function"
 markers = [
   "unit: fast isolated tests with no external dependencies",
   "integration: tests that need a database or the full app",

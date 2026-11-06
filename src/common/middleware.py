@@ -31,6 +31,8 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 from starlette.responses import Response
 
 from src.common.config import Settings, get_settings
+from src.common.envelope import failure
+from src.common.errors import ApiError, ErrorCode, http_status_for
 
 logger = logging.getLogger(__name__)
 
@@ -165,66 +167,159 @@ class RequestIdFilter(logging.Filter):
 # Error handlers
 # ---------------------------------------------------------------------------
 
+# Maps an HTTP status raised by a bare ``HTTPException`` onto the frozen
+# ErrorCode catalogue. Only the unambiguous statuses are listed; everything else
+# falls back by category (see ``_code_for_status``).
+#
+# The frozen table (manual section 4.3) is authoritative for the code -> status
+# direction, so once a code is chosen the response status is taken from
+# ``http_status_for(code)`` rather than trusting the caller. That is what keeps
+# the API, the documentation and the frontend agreeing.
+_STATUS_TO_CODE: dict[int, ErrorCode] = {
+    status.HTTP_401_UNAUTHORIZED: ErrorCode.CREDENTIALS_MISSING,
+    status.HTTP_403_FORBIDDEN: ErrorCode.PERMISSION_DENIED,
+    status.HTTP_404_NOT_FOUND: ErrorCode.RESOURCE_NOT_FOUND,
+    status.HTTP_400_BAD_REQUEST: ErrorCode.VALIDATION_FAILED,
+    # Use the module-level literal constant, NOT status.HTTP_422_UNPROCESSABLE_ENTITY:
+    # starlette deprecated that name in 1.7 and this project turns warnings into
+    # errors, so merely *referencing* it would fail every test in the suite.
+    _UNPROCESSABLE_CONTENT: ErrorCode.VALIDATION_FAILED,
+}
+
+# 401 must carry this header (RFC 6750 section 3) so browsers, OAuth2 clients
+# and fastapi.testclient recognise an authentication failure rather than a
+# generic error.
+_UNAUTHENTICATED_CODES = frozenset({ErrorCode.CREDENTIALS_MISSING, ErrorCode.CREDENTIALS_INVALID})
+
+
+def _code_for_status(http_status_code: int) -> ErrorCode:
+    """Pick the frozen code for a bare ``HTTPException`` status.
+
+    A bare ``HTTPException`` cannot express *which* business rule failed, so
+    anything not in ``_STATUS_TO_CODE`` is bucketed by side of the fault: 4xx is
+    the caller's problem (validation), 5xx is ours (internal). Modules that need
+    a 2xxxx business code — notably the two concurrency codes 20001 and 20004,
+    which are this project's external evidence of correctness — must raise
+    :class:`~src.common.errors.ApiError` instead. A warning is logged so the
+    shortcut shows up in review rather than silently weakening the contract.
+    """
+    mapped = _STATUS_TO_CODE.get(http_status_code)
+    if mapped is not None:
+        return mapped
+    if 400 <= http_status_code < 500:
+        logger.warning(
+            "Bare HTTPException with status %d has no frozen error code; "
+            "falling back to %d. Raise ApiError(ErrorCode.X) instead so the "
+            "client receives a precise business code.",
+            http_status_code,
+            int(ErrorCode.VALIDATION_FAILED),
+        )
+        return ErrorCode.VALIDATION_FAILED
+    return ErrorCode.INTERNAL_ERROR
+
 
 def _error_response(
     request: Request,
-    status_code: int,
-    detail: str,
-    extra: dict[str, Any] | None = None,
+    code: ErrorCode,
+    *,
+    message: str | None = None,
+    errors: list[dict[str, Any]] | None = None,
     headers: Mapping[str, str] | None = None,
+    http_status: int | None = None,
 ) -> JSONResponse:
-    """Build a uniform error body.
+    """Build the frozen failure envelope (manual section 4.2).
 
-    Shape: ``{"error": {"code": ..., "message": ..., "request_id": ...}}``.
-    A single consistent shape means the Vue frontend has one error-handling
-    path instead of special-casing every endpoint.
+    Shape::
 
-    ``headers`` are merged in *before* the correlation id so an exception's own
-    headers survive the rebuild — see ``http_exception_handler``.
+        {"code": 20001, "message": "...", "data": null,
+         "errors": [{"field": ..., "detail": ...}],
+         "request_id": "...", "timestamp": "...Z"}
 
-    Typed as ``Mapping`` rather than ``dict``: starlette's
-    ``HTTPException.headers`` is declared as ``Mapping[str, str] | None`` and
-    ``dict`` is invariant in its value type, so accepting only ``dict`` would
-    reject the very argument this function exists to forward. The body is copied
-    into a fresh dict below, so no mutation of the caller's mapping occurs.
+    ``errors`` is omitted when empty so a client can distinguish "no field
+    detail" from "these fields are wrong".
+
+    ``headers`` are merged before the correlation id so an exception's own
+    headers survive the rebuild. Typed ``Mapping`` rather than ``dict`` because
+    starlette declares ``HTTPException.headers`` as ``Mapping[str, str] | None``
+    and ``dict`` is invariant in its value type — accepting only ``dict`` would
+    reject the very argument this function exists to forward. The mapping is
+    copied, never mutated.
+
+    ``http_status`` overrides the frozen status for a code. Only needed when one
+    code legitimately maps to two statuses; leave it None otherwise.
     """
     request_id = getattr(request.state, REQUEST_ID_ATTR, None)
-    body: dict[str, Any] = {
-        "error": {
-            "code": status_code,
-            "message": detail,
-            "request_id": request_id,
-        }
-    }
-    if extra:
-        body["error"].update(extra)
+    body = failure(code, request_id=request_id, message=message, errors=errors)
 
     response_headers: dict[str, str] = dict(headers or {})
     if request_id:
         response_headers[REQUEST_ID_HEADER] = request_id
-    return JSONResponse(status_code=status_code, content=body, headers=response_headers or None)
+    if code in _UNAUTHENTICATED_CODES:
+        # Preserve an explicit WWW-Authenticate if the caller set one.
+        response_headers.setdefault("WWW-Authenticate", "Bearer")
+
+    return JSONResponse(
+        status_code=http_status if http_status is not None else http_status_for(code),
+        content=body,
+        headers=response_headers or None,
+    )
+
+
+async def api_error_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Convert a domain :class:`ApiError` into the frozen envelope.
+
+    This is the handler module services actually depend on. A service raises
+    ``ApiError(ErrorCode.SLOT_ALREADY_BOOKED)`` and gets a correct
+    ``{"code": 20001, ...}`` response with HTTP 409, without the application tier
+    ever importing FastAPI — which is what keeps the dependency rule in
+    ARCHITECTURE.md section 3 enforceable.
+    """
+    if not isinstance(exc, ApiError):
+        logger.exception(
+            "api_error_handler received %s",
+            type(exc).__name__,
+            extra={REQUEST_ID_ATTR: getattr(request.state, REQUEST_ID_ATTR, None)},
+        )
+        return _error_response(request, ErrorCode.INTERNAL_ERROR)
+
+    if exc.code == ErrorCode.INTERNAL_ERROR or exc.code == ErrorCode.DATABASE_ERROR:
+        # A 5xxxx is our fault, not the caller's, so the traceback belongs in the
+        # log with the same request id the client will quote back to us.
+        logger.error(
+            "ApiError %d on %s %s: %s",
+            int(exc.code),
+            request.method,
+            request.url.path,
+            exc.message,
+            extra={REQUEST_ID_ATTR: getattr(request.state, REQUEST_ID_ATTR, None)},
+        )
+    return _error_response(
+        request,
+        exc.code,
+        message=exc.message,
+        errors=exc.errors,
+        http_status=exc.http_status,
+    )
 
 
 async def http_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-    """Convert HTTPException into the standard error envelope.
+    """Convert a bare ``HTTPException`` into the frozen envelope.
 
-    The detail is passed through because it is authored by our own code (e.g.
-    "You do not have permission to perform this action"), not derived from an
-    internal error.
+    A bare ``HTTPException`` carries only a status, so the specific business code
+    is recovered via ``_code_for_status``. Modules that need a 2xxxx business code
+    — notably ``20001`` and ``20004``, which are this project's external evidence
+    of concurrency correctness — must raise ``ApiError`` instead, handled above.
 
-    ``exc.headers`` is forwarded. This is not cosmetic: RFC 6750 §3 requires a
-    401 to carry ``WWW-Authenticate: Bearer``, and browsers, OAuth2 libraries and
+    ``exc.headers`` is forwarded. This is not cosmetic: RFC 6750 §3 requires a 401
+    to carry ``WWW-Authenticate: Bearer``, and browsers, OAuth2 libraries and
     ``fastapi.testclient`` all rely on it to recognise an authentication failure.
-    Rebuilding the response here without that header silently broke every 401 —
-    the status code looked right while the contract was not.
 
     The parameter is typed ``Exception`` even though this handler is registered
-    only for ``StarletteHTTPException``. Function parameters are contravariant,
-    and starlette's ``add_exception_handler`` is typed to accept a callable
-    taking ``Exception``; declaring the narrower type here makes mypy reject the
-    registration. The ``isinstance`` guard keeps the narrowing real rather than
-    asserted away with a cast — if starlette ever routes something else here, we
-    produce a correct 500 instead of misreading unrelated attributes.
+    only for ``StarletteHTTPException``. Function parameters are contravariant and
+    starlette's ``add_exception_handler`` is typed to accept a callable taking
+    ``Exception``; declaring the narrower type makes mypy reject the registration.
+    The ``isinstance`` guard keeps the narrowing real rather than asserted away
+    with a cast.
     """
     if not isinstance(exc, StarletteHTTPException):
         logger.exception(
@@ -232,23 +327,49 @@ async def http_exception_handler(request: Request, exc: Exception) -> JSONRespon
             type(exc).__name__,
             extra={REQUEST_ID_ATTR: getattr(request.state, REQUEST_ID_ATTR, None)},
         )
-        return _error_response(
-            request,
-            status.HTTP_500_INTERNAL_SERVER_ERROR,
-            "An internal server error occurred. Please quote the request id if you report this.",
-        )
-    return _error_response(request, exc.status_code, str(exc.detail), headers=exc.headers)
+        return _error_response(request, ErrorCode.INTERNAL_ERROR)
+
+    code = _code_for_status(exc.status_code)
+    # The frozen message wins over `exc.detail`, and that is deliberate. Section
+    # 4.3 pins one wording per code so the API, the documentation and the Vue
+    # error strings cannot drift apart; letting each call site invent its own
+    # text would defeat the point of freezing the table.
+    #
+    # The caller's detail is not discarded silently — it is logged with the same
+    # request id the client receives, so support can still see what the code said.
+    logger.info(
+        "HTTPException %d mapped to code %d on %s %s (detail: %s)",
+        exc.status_code,
+        int(code),
+        request.method,
+        request.url.path,
+        exc.detail,
+        extra={REQUEST_ID_ATTR: getattr(request.state, REQUEST_ID_ATTR, None)},
+    )
+    # Preserve the caller's own headers (e.g. WWW-Authenticate, Retry-After).
+    return _error_response(
+        request,
+        code,
+        headers=exc.headers,
+        http_status=exc.status_code,
+    )
 
 
 async def validation_exception_handler(
     request: Request,
     exc: Exception,
 ) -> JSONResponse:
-    """Convert Pydantic validation failures into the standard envelope.
+    """Convert Pydantic validation failures into the frozen envelope as code 10001.
 
     Field-level errors are surfaced — the client genuinely needs to know which
     field was rejected — but the raw exception object is not, since it can echo
     back submitted values including anything sensitive a caller put in a body.
+
+    The ``errors`` entries use the contract's key names ``field`` and ``detail``
+    (manual §4.2), not ``message``/``type``. The distinction is easy to get wrong
+    and would silently break the frontend's error highlighting. Pydantic's own
+    ``type`` (e.g. ``value_error.number.not_ge``) is developer-facing jargon, so
+    it is appended to the detail only when Pydantic gave no human message.
 
     Typed ``Exception`` for the same contravariance reason as
     ``http_exception_handler`` above.
@@ -259,11 +380,7 @@ async def validation_exception_handler(
             type(exc).__name__,
             extra={REQUEST_ID_ATTR: getattr(request.state, REQUEST_ID_ATTR, None)},
         )
-        return _error_response(
-            request,
-            status.HTTP_500_INTERNAL_SERVER_ERROR,
-            "An internal server error occurred. Please quote the request id if you report this.",
-        )
+        return _error_response(request, ErrorCode.INTERNAL_ERROR)
 
     field_errors = []
     for error in exc.errors():
@@ -271,28 +388,28 @@ async def validation_exception_handler(
         # Drop the leading "body"/"query" marker; it is noise for the client.
         if location and location[0] in {"body", "query", "path", "header", "cookie"}:
             location = location[1:]
+        detail = error.get("msg") or error.get("type", "Invalid value")
         field_errors.append(
             {
                 "field": ".".join(location) or "<root>",
-                "message": error.get("msg", "Invalid value"),
-                "type": error.get("type", "value_error"),
+                "detail": str(detail),
             }
         )
     return _error_response(
         request,
-        _UNPROCESSABLE_CONTENT,
-        "Request validation failed",
-        extra={"fields": field_errors},
+        ErrorCode.VALIDATION_FAILED,
+        errors=field_errors,
     )
 
 
 async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-    """Last-resort handler: generic 500, no internals leaked.
+    """Last-resort handler: frozen code 50001, no internals leaked.
 
-    ``str(exc)`` is deliberately NOT included. Exception text routinely
-    contains SQL fragments, file paths and connection strings — exactly what an
-    attacker wants (OWASP A01/A05). The detail is already in the server log
-    with the same request id, which is what support needs.
+    ``str(exc)`` is deliberately NOT included in the response. Exception text
+    routinely contains SQL fragments, file paths and connection strings — exactly
+    what an attacker wants (OWASP A01/A05). The traceback goes to the server log
+    carrying the same request id the client receives, which is all support needs;
+    the manual's note on code 50001 makes that log correlation mandatory.
     """
     logger.exception(
         "Unhandled %s on %s %s",
@@ -301,11 +418,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
         request.url.path,
         extra={REQUEST_ID_ATTR: getattr(request.state, REQUEST_ID_ATTR, None)},
     )
-    return _error_response(
-        request,
-        status.HTTP_500_INTERNAL_SERVER_ERROR,
-        "An internal server error occurred. Please quote the request id if you report this.",
-    )
+    return _error_response(request, ErrorCode.INTERNAL_ERROR)
 
 
 # ---------------------------------------------------------------------------
@@ -349,6 +462,12 @@ def register_middleware(app: FastAPI, settings: Settings | None = None) -> None:
         max_age=600,
     )
 
+    # Registration order: most specific first. Starlette resolves a raised
+    # exception by exact type, then walks its MRO, so ApiError must be registered
+    # before the catch-all Exception handler — otherwise every domain error would
+    # be swallowed by unhandled_exception_handler and reported as a generic 50001,
+    # destroying the business codes the frontend depends on.
+    app.add_exception_handler(ApiError, api_error_handler)
     app.add_exception_handler(StarletteHTTPException, http_exception_handler)
     app.add_exception_handler(RequestValidationError, validation_exception_handler)
     app.add_exception_handler(Exception, unhandled_exception_handler)

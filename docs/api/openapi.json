@@ -29,6 +29,50 @@
         "title": "CurrentIdentity",
         "type": "object"
       },
+      "Envelope_CurrentIdentity_": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "Envelope_HealthResponse_": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "Envelope_ReviewResponse_": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "FieldError": {
+        "description": "One field-level validation or conflict detail.\n\nField names follow the contract's spelling: ``field`` and ``detail``\n(note: ``detail``, not ``message`` — a subtle difference that is easy to get\nwrong and would break the frontend's error display).",
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "field": {
+            "title": "Field",
+            "type": "string"
+          }
+        },
+        "required": [
+          "field",
+          "detail"
+        ],
+        "title": "FieldError",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
       "HealthResponse": {
         "description": "Liveness/readiness payload.",
         "properties": {
@@ -58,6 +102,124 @@
         "title": "HealthResponse",
         "type": "object"
       },
+      "ReservationCreateSchema": {
+        "properties": {
+          "reservation_time": {
+            "format": "date-time",
+            "title": "Reservation Time",
+            "type": "string"
+          },
+          "table_id": {
+            "title": "Table Id",
+            "type": "integer"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "table_id",
+          "user_id",
+          "reservation_time"
+        ],
+        "title": "ReservationCreateSchema",
+        "type": "object"
+      },
+      "ReviewCreate": {
+        "properties": {
+          "content": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content"
+          },
+          "customer_id": {
+            "title": "Customer Id",
+            "type": "integer"
+          },
+          "dish_id": {
+            "title": "Dish Id",
+            "type": "integer"
+          },
+          "order_id": {
+            "title": "Order Id",
+            "type": "integer"
+          },
+          "rating": {
+            "description": "Rating from 1 to 5",
+            "maximum": 5.0,
+            "minimum": 1.0,
+            "title": "Rating",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "customer_id",
+          "dish_id",
+          "order_id",
+          "rating"
+        ],
+        "title": "ReviewCreate",
+        "type": "object"
+      },
+      "ReviewResponse": {
+        "properties": {
+          "content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "customer_id": {
+            "title": "Customer Id",
+            "type": "integer"
+          },
+          "dish_id": {
+            "title": "Dish Id",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "order_id": {
+            "title": "Order Id",
+            "type": "integer"
+          },
+          "rating": {
+            "title": "Rating",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "customer_id",
+          "dish_id",
+          "order_id",
+          "rating",
+          "content",
+          "created_at"
+        ],
+        "title": "ReviewResponse",
+        "type": "object"
+      },
       "Role": {
         "description": "System roles, ordered from least to most privileged.\n\n`StrEnum` means the value used in JWT claims and database columns is the\nplain lowercase string (\"manager\"), while code compares against the enum\nand cannot typo a role name.",
         "enum": [
@@ -68,6 +230,46 @@
         ],
         "title": "Role",
         "type": "string"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
       }
     },
     "securitySchemes": {
@@ -79,7 +281,7 @@
     }
   },
   "info": {
-    "description": "\nRestaurant reservation and food-ordering system — JC2001 BMIS Group 4.\n\n**Modules**\n\n| Module | Base path | Objective |\n|--------|-----------|-----------|\n| Health & metadata | `/health` | — |\n| Reservation (seat booking, holds, state machine) | `/api/v1/reservations` | (a) |\n| Ordering (menu browsing, order submission) | `/api/v1/orders` | (a) |\n| Staff backend (reservation list, status, orders) | `/api/v1/staff` | (b) |\n| Membership & loyalty (auth, points, tiers, coupons) | `/api/v1/membership` | (c) |\n| Ratings & reviews (order-verified, Bayesian ranking) | `/api/v1/reviews` | (c) |\n| Analytics (manager dashboard, recommender) | `/api/v1/analytics` | (e) |\n\n**Authentication** — JWT bearer tokens. Click *Authorize* and paste the token\nreturned by the login endpoint. Roles: `customer`, `waiter`, `manager`, `admin`.\n\n**Errors** — every error response has the shape\n`{\"error\": {\"code\": <int>, \"message\": <str>, \"request_id\": <str>}}`.\nQuote the `request_id` when reporting a problem; it links the response to the\nserver log and to any audit record.\n",
+    "description": "\nRestaurant reservation and food-ordering system — JC2001 BMIS Group 4.\n\n**Modules**\n\n| Module | Base path | Objective |\n|--------|-----------|-----------|\n| Health & metadata | `/health` | — |\n| Reservation (seat booking, holds, state machine) | `/api/v1/reservations` | (a) |\n| Ordering (menu browsing, order submission) | `/api/v1/orders` | (a) |\n| Staff backend (reservation list, status, orders) | `/api/v1/staff` | (b) |\n| Membership & loyalty (auth, points, tiers, coupons) | `/api/v1/membership` | (c) |\n| Ratings & reviews (order-verified, Bayesian ranking) | `/api/v1/reviews` | (c) |\n| Analytics (manager dashboard, recommender) | `/api/v1/analytics` | (e) |\n\n**Authentication** — JWT bearer tokens. Click *Authorize* and paste the token\nreturned by the login endpoint. Roles: `customer`, `waiter`, `manager`, `admin`.\n\n**Envelope** — every response, success or failure, has the shape\n\n    {\"code\": 0, \"message\": \"ok\", \"data\": {...},\n     \"request_id\": \"…\", \"timestamp\": \"2026-10-11T12:30:00Z\"}\n\n`code` is **0 on success** and a 5-digit business code on failure (`20001` slot\nalready booked, `30003` permission denied, `50001` internal error, …). It is not\nthe HTTP status: the status tells your HTTP client what happened at the transport\nlevel, while `code` tells your application *which* rule was violated. Switch on\n`code`, not on the status. Failures may also carry\n`errors: [{\"field\": …, \"detail\": …}]` for field-level highlighting.\n\nQuote the `request_id` when reporting a problem; it links the response to the\nserver log and to any audit record.\n",
     "title": "Restaurant Reservation & Food-Ordering System",
     "version": "0.1.0"
   },
@@ -111,21 +313,21 @@
     },
     "/api/v1/auth/me": {
       "get": {
-        "description": "Return the caller's id, role and token expiry.\n\nRequires a valid bearer token. Returns 401 with\n`WWW-Authenticate: Bearer` (RFC 6750 §3) when it is absent or invalid.",
+        "description": "Return the caller's id, role and token expiry.\n\nRequires a valid bearer token. Returns 401 with\n`WWW-Authenticate: Bearer` (RFC 6750 §3) when it is absent or invalid,\ncarrying code 30001 or 30002 so the frontend can tell \"never logged in\"\nfrom \"session lapsed\".",
         "operationId": "me_api_v1_auth_me_get",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CurrentIdentity"
+                  "$ref": "#/components/schemas/Envelope_CurrentIdentity_"
                 }
               }
             },
             "description": "Successful Response"
           },
           "401": {
-            "description": "Missing, malformed or expired token"
+            "description": "Missing (30001) or invalid/expired (30002) token"
           }
         },
         "security": [
@@ -139,16 +341,16 @@
         ]
       }
     },
-    "/health": {
+    "/api/v1/health": {
       "get": {
-        "description": "Return process liveness without touching the database.\n\nKept dependency-free on purpose: when MySQL is down we still want the\ncontainer to report that the *process* is alive, so the orchestrator\nrestarts the database rather than killing the API in a loop.\n\nSettings are read from `app.state`, not from `get_settings()`, so an app\nbuilt with custom settings (tests) reports its own environment rather\nthan the process-wide one.",
-        "operationId": "health_health_get",
+        "description": "Return process liveness without touching the database.\n\nKept dependency-free on purpose: when MySQL is down we still want the\ncontainer to report that the *process* is alive, so the orchestrator\nrestarts the database rather than killing the API in a loop.\n\nSettings are read from `app.state`, not from `get_settings()`, so an app\nbuilt with custom settings (tests) reports its own environment rather\nthan the process-wide one.\n\nWrapped in the frozen envelope like every other endpoint (manual §4.2),\nso the health payload is under ``data``. The container HEALTHCHECK only\nasserts an HTTP 200, so the wrapper does not disturb it.",
+        "operationId": "health_api_v1_health_get",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HealthResponse"
+                  "$ref": "#/components/schemas/Envelope_HealthResponse_"
                 }
               }
             },
@@ -158,6 +360,292 @@
         "summary": "Liveness probe",
         "tags": [
           "health"
+        ]
+      }
+    },
+    "/api/v1/reservations": {
+      "post": {
+        "operationId": "create_reservation_api_v1_reservations_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReservationCreateSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create Reservation Api V1 Reservations Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Reservation",
+        "tags": [
+          "reservation",
+          "reservation"
+        ]
+      }
+    },
+    "/api/v1/reservations/{reservation_id}/cancel": {
+      "post": {
+        "operationId": "cancel_reservation_api_v1_reservations__reservation_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "reservation_id",
+            "required": true,
+            "schema": {
+              "title": "Reservation Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Cancel Reservation Api V1 Reservations  Reservation Id  Cancel Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel Reservation",
+        "tags": [
+          "reservation",
+          "reservation"
+        ]
+      }
+    },
+    "/api/v1/reviews/": {
+      "post": {
+        "description": "Create a review; it enters the moderation queue as PENDING (FR-REV-05).",
+        "operationId": "create_review_api_v1_reviews__post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_ReviewResponse_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Submit an order-verified review",
+        "tags": [
+          "review",
+          "review"
+        ]
+      }
+    },
+    "/api/v1/staff/orders": {
+      "get": {
+        "description": "List customer orders for staff (FR-ORD-04).",
+        "operationId": "get_orders_api_v1_staff_orders_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Orders Api V1 Staff Orders Get"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Orders",
+        "tags": [
+          "staff",
+          "staff"
+        ]
+      }
+    },
+    "/api/v1/staff/orders/{order_id}": {
+      "patch": {
+        "description": "Update an order's status (FR-ORD-04).",
+        "operationId": "update_order_status_api_v1_staff_orders__order_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "order_id",
+            "required": true,
+            "schema": {
+              "title": "Order Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Update Order Status Api V1 Staff Orders  Order Id  Patch"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update Order Status",
+        "tags": [
+          "staff",
+          "staff"
+        ]
+      }
+    },
+    "/api/v1/staff/reservations": {
+      "get": {
+        "description": "List all reservations for staff (FR-RES-06).",
+        "operationId": "get_reservations_api_v1_staff_reservations_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Reservations Api V1 Staff Reservations Get"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Reservations",
+        "tags": [
+          "staff",
+          "staff"
+        ]
+      }
+    },
+    "/api/v1/staff/reservations/{reservation_id}": {
+      "patch": {
+        "description": "Update a reservation's status (FR-RES-06).",
+        "operationId": "update_reservation_status_api_v1_staff_reservations__reservation_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "reservation_id",
+            "required": true,
+            "schema": {
+              "title": "Reservation Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Update Reservation Status Api V1 Staff Reservations  Reservation Id  Patch"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update Reservation Status",
+        "tags": [
+          "staff",
+          "staff"
         ]
       }
     }
