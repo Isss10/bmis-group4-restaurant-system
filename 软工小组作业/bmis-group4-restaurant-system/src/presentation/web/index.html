@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Restaurant Order Page</title>
+    <style>
+        *{box-sizing: border-box;margin:0;padding:0;font-family:system-ui}
+        body{padding:20px;background:#f5f5f5}
+        h1{text-align:center;margin-bottom:24px;color:#333}
+        .menu-container{max-width:900px;margin:0 auto;display:grid;grid-template-columns: repeat(auto-fill,220px);gap:16px}
+        .food-card{background:white;padding:16px;border-radius:10px;box-shadow:0 2px 8px #00000015}
+        .food-name{font-size:18px;font-weight:bold;margin-bottom:8px}
+        .food-price{color:#e53e3e;margin-bottom:12px}
+        button{background:#3182ce;color:white;border:none;padding:8px 12px;border-radius:6px;cursor:pointer;margin:4px 0}
+        .cart{max-width:900px;margin:30px auto;background:#fff;padding:20px;border-radius:10px}
+        .cart-item{display:flex;justify-content:space-between;align-items:center;margin:8px 0}
+        .remove-btn{background:#e53e3e;padding:4px 8px;font-size:12px}
+        .cart-action{margin-top:12px;display:flex;gap:10px}
+        #clearCart{background:#718096}
+        #submitOrder{background:#38a169}
+    </style>
+</head>
+<body>
+    <h1>Restaurant Menu</h1>
+    <div class="menu-container">
+        <div class="food-card">
+            <div class="food-name">Braised Pork</div>
+            <div class="food-price">$38</div>
+            <button onclick="addCart('Braised Pork',38)">Add to Cart</button>
+        </div>
+        <div class="food-card">
+            <div class="food-name">Tomato Egg Stir Fry</div>
+            <div class="food-price">$22</div>
+            <button onclick="addCart('Tomato Egg Stir Fry',22)">Add to Cart</button>
+        </div>
+        <div class="food-card">
+            <div class="food-name">Cola</div>
+            <div class="food-price">$6</div>
+            <button onclick="addCart('Cola',6)">Add to Cart</button>
+        </div>
+        <div class="food-card">
+            <div class="food-name">Caesar Salad</div>
+            <div class="food-price">$14</div>
+            <button onclick="addCart('Caesar Salad',14)">Add to Cart</button>
+        </div>
+        <div class="food-card">
+            <div class="food-name">Beef Burger</div>
+            <div class="food-price">$20</div>
+            <button onclick="addCart('Beef Burger',20)">Add to Cart</button>
+        </div>
+        <div class="food-card">
+            <div class="food-name">French Fries</div>
+            <div class="food-price">$9</div>
+            <button onclick="addCart('French Fries',9)">Add to Cart</button>
+        </div>
+    </div>
+    <div class="cart">
+        <h3>Shopping Cart</h3>
+        <ul id="cartList"></ul>
+        <p>Total: <span id="total">0</span> USD</p >
+        <div class="cart-action">
+            <button id="clearCart" onclick="clearCart()">Clear Cart</button>
+            <button id="submitOrder" onclick="submitOrder()">Submit Order</button>
+        </div>
+    </div>
+
+<script>
+let cart = []
+
+// Add item to cart
+function addCart(name,price){
+    cart.push({name,price})
+    renderCart()
+}
+
+// Remove single item
+function removeItem(index){
+    cart.splice(index,1)
+    renderCart()
+}
+
+// Clear all items
+function clearCart(){
+    cart = []
+    renderCart()
+}
+
+// Render shopping cart
+function renderCart(){
+    const listDom = document.getElementById('cartList')
+    const totalDom = document.getElementById('total')
+    listDom.innerHTML = ''
+    let total = 0
+    cart.forEach((item,index)=>{
+        listDom.innerHTML += `
+        <li class="cart-item">
+            <span>${item.name} $${item.price}</span>
+            <button class="remove-btn" onclick="removeItem(${index})">Remove</button>
+        </li>`
+        total += item.price
+    })
+    totalDom.innerText = total
+}
+
+// Submit order function
+function submitOrder(){
+    if(cart.length === 0){
+        alert("Your cart is empty, please add items first!")
+        return
+    }
+    let orderText = "Order Summary:\n"
+    cart.forEach(item=>{
+        orderText += `${item.name} - $${item.price}\n`
+    })
+    orderText += `\nTotal: $${calculateTotal()}`
+    alert(orderText + "\nOrder submitted successfully!")
+}
+
+function calculateTotal(){
+    let total = 0
+    cart.forEach(item=> total += item.price)
+    return total
+}
+</script>
+</body>
+</html>

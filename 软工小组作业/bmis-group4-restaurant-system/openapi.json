@@ -1,0 +1,3282 @@
+{
+  "components": {
+    "schemas": {
+      "AppliedCouponOut": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "discount": {
+            "title": "Discount",
+            "type": "string"
+          },
+          "user_coupon_id": {
+            "title": "User Coupon Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "user_coupon_id",
+          "code",
+          "discount"
+        ],
+        "title": "AppliedCouponOut",
+        "type": "object"
+      },
+      "CouponCreateIn": {
+        "properties": {
+          "code": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "title": "Code",
+            "type": "string"
+          },
+          "discount_type": {
+            "$ref": "#/components/schemas/CouponDiscountType"
+          },
+          "discount_value": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Discount Value"
+          },
+          "min_spend": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "default": "0.00",
+            "title": "Min Spend"
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "stacking": {
+            "$ref": "#/components/schemas/CouponStacking",
+            "default": "STACKABLE"
+          },
+          "valid_from": {
+            "format": "date-time",
+            "title": "Valid From",
+            "type": "string"
+          },
+          "valid_until": {
+            "format": "date-time",
+            "title": "Valid Until",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "name",
+          "discount_type",
+          "discount_value",
+          "valid_from",
+          "valid_until"
+        ],
+        "title": "CouponCreateIn",
+        "type": "object"
+      },
+      "CouponDefinitionOut": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "discount_type": {
+            "$ref": "#/components/schemas/CouponDiscountType"
+          },
+          "discount_value": {
+            "title": "Discount Value",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "is_active": {
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "min_spend": {
+            "title": "Min Spend",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "stacking": {
+            "$ref": "#/components/schemas/CouponStacking"
+          },
+          "valid_from": {
+            "title": "Valid From",
+            "type": "string"
+          },
+          "valid_until": {
+            "title": "Valid Until",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "name",
+          "discount_type",
+          "discount_value",
+          "min_spend",
+          "stacking",
+          "valid_from",
+          "valid_until",
+          "is_active"
+        ],
+        "title": "CouponDefinitionOut",
+        "type": "object"
+      },
+      "CouponDiscountType": {
+        "description": "How a coupon's value is interpreted.",
+        "enum": [
+          "PERCENT",
+          "FIXED"
+        ],
+        "title": "CouponDiscountType",
+        "type": "string"
+      },
+      "CouponIssueIn": {
+        "properties": {
+          "coupon_id": {
+            "exclusiveMinimum": 0.0,
+            "title": "Coupon Id",
+            "type": "integer"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "user_id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "coupon_id",
+          "user_id"
+        ],
+        "title": "CouponIssueIn",
+        "type": "object"
+      },
+      "CouponIssueOut": {
+        "properties": {
+          "coupon_id": {
+            "title": "Coupon Id",
+            "type": "integer"
+          },
+          "expires_at": {
+            "title": "Expires At",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/UserCouponStatus"
+          },
+          "user_coupon_id": {
+            "title": "User Coupon Id",
+            "type": "integer"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_coupon_id",
+          "user_id",
+          "coupon_id",
+          "status",
+          "expires_at"
+        ],
+        "title": "CouponIssueOut",
+        "type": "object"
+      },
+      "CouponOut": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "discount_type": {
+            "$ref": "#/components/schemas/CouponDiscountType"
+          },
+          "discount_value": {
+            "title": "Discount Value",
+            "type": "string"
+          },
+          "expires_at": {
+            "title": "Expires At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "min_spend": {
+            "title": "Min Spend",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "stacking": {
+            "$ref": "#/components/schemas/CouponStacking"
+          },
+          "status": {
+            "$ref": "#/components/schemas/UserCouponStatus"
+          },
+          "user_coupon_id": {
+            "title": "User Coupon Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "user_coupon_id",
+          "code",
+          "name",
+          "discount_type",
+          "discount_value",
+          "min_spend",
+          "stacking",
+          "status",
+          "expires_at"
+        ],
+        "title": "CouponOut",
+        "type": "object"
+      },
+      "CouponQuoteIn": {
+        "properties": {
+          "order_subtotal": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Order Subtotal"
+          },
+          "user_coupon_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "maxItems": 20,
+            "title": "User Coupon Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "order_subtotal"
+        ],
+        "title": "CouponQuoteIn",
+        "type": "object"
+      },
+      "CouponQuoteOut": {
+        "properties": {
+          "applied_coupons": {
+            "items": {
+              "$ref": "#/components/schemas/AppliedCouponOut"
+            },
+            "title": "Applied Coupons",
+            "type": "array"
+          },
+          "coupon_discount": {
+            "title": "Coupon Discount",
+            "type": "string"
+          },
+          "order_subtotal": {
+            "title": "Order Subtotal",
+            "type": "string"
+          },
+          "payable_total": {
+            "title": "Payable Total",
+            "type": "string"
+          },
+          "tier_discount": {
+            "title": "Tier Discount",
+            "type": "string"
+          },
+          "tier_name": {
+            "title": "Tier Name",
+            "type": "string"
+          },
+          "total_discount": {
+            "title": "Total Discount",
+            "type": "string"
+          }
+        },
+        "required": [
+          "order_subtotal",
+          "tier_name",
+          "tier_discount",
+          "coupon_discount",
+          "total_discount",
+          "payable_total",
+          "applied_coupons"
+        ],
+        "title": "CouponQuoteOut",
+        "type": "object"
+      },
+      "CouponRedeemIn": {
+        "properties": {
+          "order_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Order Id",
+            "type": "string"
+          },
+          "order_subtotal": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Order Subtotal"
+          },
+          "user_coupon_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "maxItems": 20,
+            "title": "User Coupon Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "order_subtotal",
+          "order_id"
+        ],
+        "title": "CouponRedeemIn",
+        "type": "object"
+      },
+      "CouponRedeemOut": {
+        "properties": {
+          "applied_coupons": {
+            "items": {
+              "$ref": "#/components/schemas/AppliedCouponOut"
+            },
+            "title": "Applied Coupons",
+            "type": "array"
+          },
+          "coupon_discount": {
+            "title": "Coupon Discount",
+            "type": "string"
+          },
+          "duplicate": {
+            "title": "Duplicate",
+            "type": "boolean"
+          },
+          "order_id": {
+            "title": "Order Id",
+            "type": "string"
+          },
+          "order_subtotal": {
+            "title": "Order Subtotal",
+            "type": "string"
+          },
+          "payable_total": {
+            "title": "Payable Total",
+            "type": "string"
+          },
+          "tier_discount": {
+            "title": "Tier Discount",
+            "type": "string"
+          },
+          "tier_name": {
+            "title": "Tier Name",
+            "type": "string"
+          },
+          "total_discount": {
+            "title": "Total Discount",
+            "type": "string"
+          }
+        },
+        "required": [
+          "order_subtotal",
+          "tier_name",
+          "tier_discount",
+          "coupon_discount",
+          "total_discount",
+          "payable_total",
+          "applied_coupons",
+          "order_id",
+          "duplicate"
+        ],
+        "title": "CouponRedeemOut",
+        "type": "object"
+      },
+      "CouponStacking": {
+        "description": "Whether a coupon may be combined with other coupons.",
+        "enum": [
+          "EXCLUSIVE",
+          "STACKABLE"
+        ],
+        "title": "CouponStacking",
+        "type": "string"
+      },
+      "CurrentIdentity": {
+        "description": "What `/api/v1/auth/me` returns about the caller.\n\nDeliberately narrow. It is the minimum the SPA needs to render the right\nnavigation and to decide whether to refresh the token — and it is derived\nfrom a *verified* token rather than from anything the client sends.\n\nNo email, no points balance, no membership tier: those belong to the\nmembership module's own endpoints, and returning them here would let every\nfrontend depend on a shape the membership owner has to keep stable.",
+        "properties": {
+          "expires_at": {
+            "title": "Expires At",
+            "type": "integer"
+          },
+          "role": {
+            "$ref": "#/components/schemas/Role"
+          },
+          "token_id": {
+            "title": "Token Id",
+            "type": "string"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "role",
+          "token_id",
+          "expires_at"
+        ],
+        "title": "CurrentIdentity",
+        "type": "object"
+      },
+      "Envelope_CouponDefinitionOut_": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "Envelope_CouponIssueOut_": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "Envelope_CouponQuoteOut_": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "Envelope_CouponRedeemOut_": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "Envelope_CurrentIdentity_": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "Envelope_ExpiryRunOut_": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "Envelope_HealthResponse_": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "Envelope_MembershipSummaryOut_": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "Envelope_OrderCompletedOut_": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "Envelope_Page_PointsLedgerOut__": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "Envelope_PointsAdjustOut_": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "Envelope_PointsRedeemOut_": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "Envelope_ReviewResponse_": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "Envelope_TierOut_": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "Envelope_list_CouponOut__": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "Envelope_list_TierOut__": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "ExpiryRunOut": {
+        "properties": {
+          "expired_lots": {
+            "title": "Expired Lots",
+            "type": "integer"
+          },
+          "expired_points": {
+            "title": "Expired Points",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expired_lots",
+          "expired_points"
+        ],
+        "title": "ExpiryRunOut",
+        "type": "object"
+      },
+      "FieldError": {
+        "description": "One field-level validation or conflict detail.\n\nField names follow the contract's spelling: ``field`` and ``detail``\n(note: ``detail``, not ``message`` — a subtle difference that is easy to get\nwrong and would break the frontend's error display).",
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "field": {
+            "title": "Field",
+            "type": "string"
+          }
+        },
+        "required": [
+          "field",
+          "detail"
+        ],
+        "title": "FieldError",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HealthResponse": {
+        "description": "Liveness/readiness payload.",
+        "properties": {
+          "app": {
+            "title": "App",
+            "type": "string"
+          },
+          "environment": {
+            "title": "Environment",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "app",
+          "version",
+          "environment"
+        ],
+        "title": "HealthResponse",
+        "type": "object"
+      },
+      "MembershipSummaryOut": {
+        "properties": {
+          "available_coupons": {
+            "items": {
+              "$ref": "#/components/schemas/CouponOut"
+            },
+            "title": "Available Coupons",
+            "type": "array"
+          },
+          "points_balance": {
+            "title": "Points Balance",
+            "type": "integer"
+          },
+          "qualifying_spend": {
+            "title": "Qualifying Spend",
+            "type": "string"
+          },
+          "tier": {
+            "$ref": "#/components/schemas/TierOut"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "points_balance",
+          "qualifying_spend",
+          "tier",
+          "available_coupons"
+        ],
+        "title": "MembershipSummaryOut",
+        "type": "object"
+      },
+      "OrderCompletedIn": {
+        "description": "Payload for the ordering -> loyalty integration boundary.",
+        "properties": {
+          "paid_amount": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Paid Amount"
+          },
+          "user_id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "paid_amount"
+        ],
+        "title": "OrderCompletedIn",
+        "type": "object"
+      },
+      "OrderCompletedOut": {
+        "properties": {
+          "duplicate": {
+            "title": "Duplicate",
+            "type": "boolean"
+          },
+          "order_id": {
+            "title": "Order Id",
+            "type": "string"
+          },
+          "points_awarded": {
+            "title": "Points Awarded",
+            "type": "integer"
+          },
+          "points_balance": {
+            "title": "Points Balance",
+            "type": "integer"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "order_id",
+          "user_id",
+          "points_awarded",
+          "duplicate",
+          "points_balance"
+        ],
+        "title": "OrderCompletedOut",
+        "type": "object"
+      },
+      "Page_PointsLedgerOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PointsLedgerOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "total_pages": {
+            "title": "Total Pages",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "page_size",
+          "total_pages"
+        ],
+        "title": "Page[PointsLedgerOut]",
+        "type": "object"
+      },
+      "PointsAdjustIn": {
+        "properties": {
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "idempotency_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Idempotency Key",
+            "type": "string"
+          },
+          "points": {
+            "title": "Points",
+            "type": "integer"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "user_id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "points",
+          "reason",
+          "idempotency_key"
+        ],
+        "title": "PointsAdjustIn",
+        "type": "object"
+      },
+      "PointsAdjustOut": {
+        "properties": {
+          "duplicate": {
+            "title": "Duplicate",
+            "type": "boolean"
+          },
+          "ledger_id": {
+            "title": "Ledger Id",
+            "type": "integer"
+          },
+          "points_balance": {
+            "title": "Points Balance",
+            "type": "integer"
+          },
+          "points_changed": {
+            "title": "Points Changed",
+            "type": "integer"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ledger_id",
+          "user_id",
+          "points_changed",
+          "points_balance",
+          "duplicate"
+        ],
+        "title": "PointsAdjustOut",
+        "type": "object"
+      },
+      "PointsLedgerOut": {
+        "properties": {
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "points": {
+            "title": "Points",
+            "type": "integer"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "source_id": {
+            "title": "Source Id",
+            "type": "string"
+          },
+          "source_type": {
+            "title": "Source Type",
+            "type": "string"
+          },
+          "txn_type": {
+            "$ref": "#/components/schemas/PointsTxnType"
+          }
+        },
+        "required": [
+          "id",
+          "txn_type",
+          "points",
+          "source_type",
+          "source_id",
+          "reason",
+          "expires_at",
+          "created_at"
+        ],
+        "title": "PointsLedgerOut",
+        "type": "object"
+      },
+      "PointsRedeemIn": {
+        "properties": {
+          "order_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Order Id",
+            "type": "string"
+          },
+          "points": {
+            "exclusiveMinimum": 0.0,
+            "title": "Points",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "order_id",
+          "points"
+        ],
+        "title": "PointsRedeemIn",
+        "type": "object"
+      },
+      "PointsRedeemOut": {
+        "properties": {
+          "duplicate": {
+            "title": "Duplicate",
+            "type": "boolean"
+          },
+          "order_id": {
+            "title": "Order Id",
+            "type": "string"
+          },
+          "points_balance": {
+            "title": "Points Balance",
+            "type": "integer"
+          },
+          "points_redeemed": {
+            "title": "Points Redeemed",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "order_id",
+          "points_redeemed",
+          "points_balance",
+          "duplicate"
+        ],
+        "title": "PointsRedeemOut",
+        "type": "object"
+      },
+      "PointsTxnType": {
+        "description": "Frozen points-ledger transaction vocabulary.",
+        "enum": [
+          "EARN",
+          "REDEEM",
+          "EXPIRE",
+          "ADJUST"
+        ],
+        "title": "PointsTxnType",
+        "type": "string"
+      },
+      "ReservationCreateSchema": {
+        "properties": {
+          "reservation_time": {
+            "format": "date-time",
+            "title": "Reservation Time",
+            "type": "string"
+          },
+          "table_id": {
+            "title": "Table Id",
+            "type": "integer"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "table_id",
+          "user_id",
+          "reservation_time"
+        ],
+        "title": "ReservationCreateSchema",
+        "type": "object"
+      },
+      "ReviewCreate": {
+        "properties": {
+          "content": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content"
+          },
+          "customer_id": {
+            "title": "Customer Id",
+            "type": "integer"
+          },
+          "dish_id": {
+            "title": "Dish Id",
+            "type": "integer"
+          },
+          "order_id": {
+            "title": "Order Id",
+            "type": "integer"
+          },
+          "rating": {
+            "description": "Rating from 1 to 5",
+            "maximum": 5.0,
+            "minimum": 1.0,
+            "title": "Rating",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "customer_id",
+          "dish_id",
+          "order_id",
+          "rating"
+        ],
+        "title": "ReviewCreate",
+        "type": "object"
+      },
+      "ReviewResponse": {
+        "properties": {
+          "content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "customer_id": {
+            "title": "Customer Id",
+            "type": "integer"
+          },
+          "dish_id": {
+            "title": "Dish Id",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "order_id": {
+            "title": "Order Id",
+            "type": "integer"
+          },
+          "rating": {
+            "title": "Rating",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "customer_id",
+          "dish_id",
+          "order_id",
+          "rating",
+          "content",
+          "created_at"
+        ],
+        "title": "ReviewResponse",
+        "type": "object"
+      },
+      "Role": {
+        "description": "System roles, ordered from least to most privileged.\n\n`StrEnum` means the value used in JWT claims and database columns is the\nplain lowercase string (\"manager\"), while code compares against the enum\nand cannot typo a role name.",
+        "enum": [
+          "customer",
+          "waiter",
+          "manager",
+          "admin"
+        ],
+        "title": "Role",
+        "type": "string"
+      },
+      "TierConfigIn": {
+        "properties": {
+          "discount_rate": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Discount Rate"
+          },
+          "is_active": {
+            "default": true,
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "min_qualifying_spend": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Min Qualifying Spend"
+          },
+          "name": {
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "min_qualifying_spend",
+          "discount_rate"
+        ],
+        "title": "TierConfigIn",
+        "type": "object"
+      },
+      "TierOut": {
+        "properties": {
+          "discount_rate": {
+            "title": "Discount Rate",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "is_active": {
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "min_qualifying_spend": {
+            "title": "Min Qualifying Spend",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "min_qualifying_spend",
+          "discount_rate",
+          "is_active"
+        ],
+        "title": "TierOut",
+        "type": "object"
+      },
+      "UserCouponStatus": {
+        "enum": [
+          "AVAILABLE",
+          "USED",
+          "EXPIRED",
+          "CANCELLED"
+        ],
+        "title": "UserCouponStatus",
+        "type": "string"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "bearerFormat": "JWT",
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "description": "\nRestaurant reservation and food-ordering system — JC2001 BMIS Group 4.\n\n**Modules**\n\n| Module | Base path | Objective |\n|--------|-----------|-----------|\n| Health & metadata | `/health` | — |\n| Reservation (seat booking, holds, state machine) | `/api/v1/reservations` | (a) |\n| Ordering (menu browsing, order submission) | `/api/v1/orders` | (a) |\n| Staff backend (reservation list, status, orders) | `/api/v1/staff` | (b) |\n| Membership & loyalty (auth, points, tiers, coupons) | `/api/v1/membership` | (c) |\n| Ratings & reviews (order-verified, Bayesian ranking) | `/api/v1/reviews` | (c) |\n| Analytics (manager dashboard, recommender) | `/api/v1/analytics` | (e) |\n\n**Authentication** — JWT bearer tokens. Click *Authorize* and paste the token\nreturned by the login endpoint. Roles: `customer`, `waiter`, `manager`, `admin`.\n\n**Envelope** — every response, success or failure, has the shape\n\n    {\"code\": 0, \"message\": \"ok\", \"data\": {...},\n     \"request_id\": \"…\", \"timestamp\": \"2026-10-11T12:30:00Z\"}\n\n`code` is **0 on success** and a 5-digit business code on failure (`20001` slot\nalready booked, `30003` permission denied, `50001` internal error, …). It is not\nthe HTTP status: the status tells your HTTP client what happened at the transport\nlevel, while `code` tells your application *which* rule was violated. Switch on\n`code`, not on the status. Failures may also carry\n`errors: [{\"field\": …, \"detail\": …}]` for field-level highlighting.\n\nQuote the `request_id` when reporting a problem; it links the response to the\nserver log and to any audit record.\n",
+    "title": "Restaurant Reservation & Food-Ordering System",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/": {
+      "get": {
+        "description": "Return the service name, version and the API base path.\n\nDeliberately discloses nothing beyond what is already public in the\nrepository.",
+        "operationId": "root__get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Root  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Service index",
+        "tags": [
+          "meta"
+        ]
+      }
+    },
+    "/api/v1/analytics/demand-heatmap": {
+      "get": {
+        "operationId": "demand_heatmap_api_v1_analytics_demand_heatmap_get",
+        "responses": {
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Reserved endpoint; implementation is pending."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Hourly demand heat map (reserved)",
+        "tags": [
+          "analytics",
+          "analytics"
+        ],
+        "x-implementation-status": "reserved",
+        "x-requirement": "FR-ANA-03"
+      }
+    },
+    "/api/v1/analytics/no-show-rate": {
+      "get": {
+        "operationId": "no_show_rate_api_v1_analytics_no_show_rate_get",
+        "responses": {
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Reserved endpoint; implementation is pending."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "No-show rate (reserved)",
+        "tags": [
+          "analytics",
+          "analytics"
+        ],
+        "x-implementation-status": "reserved",
+        "x-requirement": "FR-ANA-04"
+      }
+    },
+    "/api/v1/analytics/recommendations": {
+      "get": {
+        "operationId": "recommendations_api_v1_analytics_recommendations_get",
+        "responses": {
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Reserved endpoint; implementation is pending."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Dish recommendations (reserved)",
+        "tags": [
+          "analytics",
+          "analytics"
+        ],
+        "x-implementation-status": "reserved",
+        "x-requirement": "FR-ANA-05"
+      }
+    },
+    "/api/v1/analytics/revenue": {
+      "get": {
+        "operationId": "revenue_trend_api_v1_analytics_revenue_get",
+        "responses": {
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Reserved endpoint; implementation is pending."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Revenue trend (reserved)",
+        "tags": [
+          "analytics",
+          "analytics"
+        ],
+        "x-implementation-status": "reserved",
+        "x-requirement": "FR-ANA-01"
+      }
+    },
+    "/api/v1/analytics/summary": {
+      "get": {
+        "operationId": "dashboard_summary_api_v1_analytics_summary_get",
+        "responses": {
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Reserved endpoint; implementation is pending."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Dashboard summary (reserved)",
+        "tags": [
+          "analytics",
+          "analytics"
+        ],
+        "x-implementation-status": "reserved",
+        "x-requirement": "FR-ANA-01/FR-ANA-04"
+      }
+    },
+    "/api/v1/analytics/table-turnover": {
+      "get": {
+        "operationId": "table_turnover_api_v1_analytics_table_turnover_get",
+        "responses": {
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Reserved endpoint; implementation is pending."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Table turnover (reserved)",
+        "tags": [
+          "analytics",
+          "analytics"
+        ],
+        "x-implementation-status": "reserved",
+        "x-requirement": "FR-ANA-02"
+      }
+    },
+    "/api/v1/auth/login": {
+      "post": {
+        "operationId": "login_api_v1_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Reserved endpoint; implementation is pending."
+          }
+        },
+        "summary": "Log in (reserved)",
+        "tags": [
+          "auth"
+        ],
+        "x-implementation-status": "reserved",
+        "x-requirement": "FR-MEM-01"
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "operationId": "logout_api_v1_auth_logout_post",
+        "responses": {
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Reserved endpoint; implementation is pending."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Log out (reserved)",
+        "tags": [
+          "auth"
+        ],
+        "x-implementation-status": "reserved",
+        "x-requirement": "FR-MEM-01"
+      }
+    },
+    "/api/v1/auth/me": {
+      "get": {
+        "description": "Return the caller's id, role and token expiry.\n\nRequires a valid bearer token. Returns 401 with\n`WWW-Authenticate: Bearer` (RFC 6750 §3) when it is absent or invalid,\ncarrying code 30001 or 30002 so the frontend can tell \"never logged in\"\nfrom \"session lapsed\".",
+        "operationId": "me_api_v1_auth_me_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_CurrentIdentity_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Missing (30001) or invalid/expired (30002) token"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Current identity",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/refresh": {
+      "post": {
+        "operationId": "refresh_api_v1_auth_refresh_post",
+        "responses": {
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Reserved endpoint; implementation is pending."
+          }
+        },
+        "summary": "Refresh a session (reserved)",
+        "tags": [
+          "auth"
+        ],
+        "x-implementation-status": "reserved",
+        "x-requirement": "FR-MEM-01"
+      }
+    },
+    "/api/v1/auth/register": {
+      "post": {
+        "operationId": "register_api_v1_auth_register_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Reserved endpoint; implementation is pending."
+          }
+        },
+        "summary": "Register a customer account (reserved)",
+        "tags": [
+          "auth"
+        ],
+        "x-implementation-status": "reserved",
+        "x-requirement": "FR-MEM-01"
+      }
+    },
+    "/api/v1/health": {
+      "get": {
+        "description": "Return process liveness without touching the database.\n\nKept dependency-free on purpose: when MySQL is down we still want the\ncontainer to report that the *process* is alive, so the orchestrator\nrestarts the database rather than killing the API in a loop.\n\nSettings are read from `app.state`, not from `get_settings()`, so an app\nbuilt with custom settings (tests) reports its own environment rather\nthan the process-wide one.\n\nWrapped in the frozen envelope like every other endpoint (manual §4.2),\nso the health payload is under ``data``. The container HEALTHCHECK only\nasserts an HTTP 200, so the wrapper does not disturb it.",
+        "operationId": "health_api_v1_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_HealthResponse_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Liveness probe",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/api/v1/membership/admin/points/adjust": {
+      "post": {
+        "operationId": "adjust_points_api_v1_membership_admin_points_adjust_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PointsAdjustIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_PointsAdjustOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Adjust a member's points (manager/admin)",
+        "tags": [
+          "membership",
+          "membership"
+        ],
+        "x-contract-id": "LOY-11",
+        "x-implementation-status": "implemented",
+        "x-module": "loyalty"
+      }
+    },
+    "/api/v1/membership/admin/points/expire": {
+      "post": {
+        "operationId": "expire_points_api_v1_membership_admin_points_expire_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_ExpiryRunOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Run point-expiry processing (manager/admin or scheduled caller)",
+        "tags": [
+          "membership",
+          "membership"
+        ],
+        "x-contract-id": "LOY-12",
+        "x-implementation-status": "implemented",
+        "x-module": "loyalty"
+      }
+    },
+    "/api/v1/membership/coupons": {
+      "get": {
+        "operationId": "list_coupons_api_v1_membership_coupons_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_list_CouponOut__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List the current customer's available coupons",
+        "tags": [
+          "membership",
+          "membership"
+        ],
+        "x-contract-id": "LOY-06",
+        "x-implementation-status": "implemented",
+        "x-module": "loyalty"
+      },
+      "post": {
+        "operationId": "create_coupon_api_v1_membership_coupons_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CouponCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_CouponDefinitionOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create a coupon definition (manager/admin)",
+        "tags": [
+          "membership",
+          "membership"
+        ],
+        "x-contract-id": "LOY-07",
+        "x-implementation-status": "implemented",
+        "x-module": "loyalty"
+      }
+    },
+    "/api/v1/membership/coupons/issue": {
+      "post": {
+        "operationId": "issue_coupon_api_v1_membership_coupons_issue_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CouponIssueIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_CouponIssueOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Issue a coupon to a customer (manager/admin)",
+        "tags": [
+          "membership",
+          "membership"
+        ],
+        "x-contract-id": "LOY-08",
+        "x-implementation-status": "implemented",
+        "x-module": "loyalty"
+      }
+    },
+    "/api/v1/membership/coupons/quote": {
+      "post": {
+        "operationId": "quote_coupons_api_v1_membership_coupons_quote_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CouponQuoteIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_CouponQuoteOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Quote tier and coupon discounts without consuming a coupon",
+        "tags": [
+          "membership",
+          "membership"
+        ],
+        "x-contract-id": "LOY-09",
+        "x-implementation-status": "implemented",
+        "x-module": "loyalty"
+      }
+    },
+    "/api/v1/membership/coupons/redeem": {
+      "post": {
+        "operationId": "redeem_coupons_api_v1_membership_coupons_redeem_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CouponRedeemIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_CouponRedeemOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Atomically consume coupons for an order",
+        "tags": [
+          "membership",
+          "membership"
+        ],
+        "x-contract-id": "LOY-10",
+        "x-implementation-status": "implemented",
+        "x-module": "loyalty"
+      }
+    },
+    "/api/v1/membership/events/orders/{order_id}/completed": {
+      "post": {
+        "operationId": "order_completed_api_v1_membership_events_orders__order_id__completed_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "order_id",
+            "required": true,
+            "schema": {
+              "title": "Order Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrderCompletedIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_OrderCompletedOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Integration event: award points for a completed order",
+        "tags": [
+          "membership",
+          "membership"
+        ],
+        "x-contract-id": "LOY-13",
+        "x-implementation-status": "implemented",
+        "x-module": "loyalty"
+      }
+    },
+    "/api/v1/membership/me": {
+      "get": {
+        "operationId": "get_membership_summary_api_v1_membership_me_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_MembershipSummaryOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get current member points, tier and available coupons",
+        "tags": [
+          "membership",
+          "membership"
+        ],
+        "x-contract-id": "LOY-01",
+        "x-implementation-status": "implemented",
+        "x-module": "loyalty"
+      }
+    },
+    "/api/v1/membership/points": {
+      "get": {
+        "operationId": "list_points_api_v1_membership_points_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_Page_PointsLedgerOut__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List the current customer's append-only points ledger",
+        "tags": [
+          "membership",
+          "membership"
+        ],
+        "x-contract-id": "LOY-02",
+        "x-implementation-status": "implemented",
+        "x-module": "loyalty"
+      }
+    },
+    "/api/v1/membership/points/redeem": {
+      "post": {
+        "operationId": "redeem_points_api_v1_membership_points_redeem_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PointsRedeemIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_PointsRedeemOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Redeem points for an order",
+        "tags": [
+          "membership",
+          "membership"
+        ],
+        "x-contract-id": "LOY-03",
+        "x-implementation-status": "implemented",
+        "x-module": "loyalty"
+      }
+    },
+    "/api/v1/membership/tiers": {
+      "get": {
+        "operationId": "list_tiers_api_v1_membership_tiers_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_list_TierOut__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List membership tiers",
+        "tags": [
+          "membership",
+          "membership"
+        ],
+        "x-contract-id": "LOY-04",
+        "x-implementation-status": "implemented",
+        "x-module": "loyalty"
+      },
+      "post": {
+        "operationId": "configure_tier_api_v1_membership_tiers_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TierConfigIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_TierOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create or update a membership tier (manager/admin)",
+        "tags": [
+          "membership",
+          "membership"
+        ],
+        "x-contract-id": "LOY-05",
+        "x-implementation-status": "implemented",
+        "x-module": "loyalty"
+      }
+    },
+    "/api/v1/orders": {
+      "post": {
+        "operationId": "submit_order_api_v1_orders_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Reserved endpoint; implementation is pending."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Submit an order (reserved)",
+        "tags": [
+          "ordering",
+          "ordering"
+        ],
+        "x-implementation-status": "reserved",
+        "x-requirement": "FR-ORD-02/FR-ORD-03"
+      }
+    },
+    "/api/v1/orders/menu": {
+      "get": {
+        "operationId": "browse_menu_api_v1_orders_menu_get",
+        "responses": {
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Reserved endpoint; implementation is pending."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Browse the menu (reserved)",
+        "tags": [
+          "ordering",
+          "ordering"
+        ],
+        "x-implementation-status": "reserved",
+        "x-requirement": "FR-ORD-01"
+      }
+    },
+    "/api/v1/orders/menu/{dish_id}": {
+      "get": {
+        "operationId": "get_dish_api_v1_orders_menu__dish_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "dish_id",
+            "required": true,
+            "schema": {
+              "title": "Dish Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Reserved endpoint; implementation is pending."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "View dish details (reserved)",
+        "tags": [
+          "ordering",
+          "ordering"
+        ],
+        "x-implementation-status": "reserved",
+        "x-requirement": "FR-ORD-01"
+      }
+    },
+    "/api/v1/orders/{order_id}": {
+      "get": {
+        "operationId": "get_order_api_v1_orders__order_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "order_id",
+            "required": true,
+            "schema": {
+              "title": "Order Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Reserved endpoint; implementation is pending."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "View an order (reserved)",
+        "tags": [
+          "ordering",
+          "ordering"
+        ],
+        "x-implementation-status": "reserved",
+        "x-requirement": "FR-ORD-02"
+      }
+    },
+    "/api/v1/orders/{order_id}/status": {
+      "patch": {
+        "operationId": "update_order_status_api_v1_orders__order_id__status_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "order_id",
+            "required": true,
+            "schema": {
+              "title": "Order Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Reserved endpoint; implementation is pending."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update order status (reserved)",
+        "tags": [
+          "ordering",
+          "ordering"
+        ],
+        "x-implementation-status": "reserved",
+        "x-requirement": "FR-ORD-04"
+      }
+    },
+    "/api/v1/reservations": {
+      "get": {
+        "operationId": "list_reservations_api_v1_reservations_get",
+        "responses": {
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Reserved endpoint; implementation is pending."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List reservations (reserved)",
+        "tags": [
+          "reservation",
+          "reservation"
+        ],
+        "x-implementation-status": "reserved",
+        "x-requirement": "FR-RES-06"
+      },
+      "post": {
+        "operationId": "create_reservation_api_v1_reservations_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReservationCreateSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create Reservation Api V1 Reservations Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Reservation",
+        "tags": [
+          "reservation",
+          "reservation"
+        ]
+      }
+    },
+    "/api/v1/reservations/availability": {
+      "get": {
+        "operationId": "list_availability_api_v1_reservations_availability_get",
+        "responses": {
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Reserved endpoint; implementation is pending."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Query table availability (reserved)",
+        "tags": [
+          "reservation",
+          "reservation"
+        ],
+        "x-implementation-status": "reserved",
+        "x-requirement": "FR-RES-01"
+      }
+    },
+    "/api/v1/reservations/expire-holds": {
+      "post": {
+        "operationId": "expire_reservation_holds_api_v1_reservations_expire_holds_post",
+        "responses": {
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Reserved endpoint; implementation is pending."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Expire stale seat holds (reserved)",
+        "tags": [
+          "reservation",
+          "reservation"
+        ],
+        "x-implementation-status": "reserved",
+        "x-requirement": "FR-RES-04"
+      }
+    },
+    "/api/v1/reservations/{reservation_id}/cancel": {
+      "post": {
+        "operationId": "cancel_reservation_api_v1_reservations__reservation_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "reservation_id",
+            "required": true,
+            "schema": {
+              "title": "Reservation Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Cancel Reservation Api V1 Reservations  Reservation Id  Cancel Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel Reservation",
+        "tags": [
+          "reservation",
+          "reservation"
+        ]
+      }
+    },
+    "/api/v1/reservations/{reservation_id}/confirm": {
+      "post": {
+        "operationId": "confirm_reservation_api_v1_reservations__reservation_id__confirm_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "reservation_id",
+            "required": true,
+            "schema": {
+              "title": "Reservation Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Reserved endpoint; implementation is pending."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Confirm a held reservation (reserved)",
+        "tags": [
+          "reservation",
+          "reservation"
+        ],
+        "x-implementation-status": "reserved",
+        "x-requirement": "FR-RES-02"
+      }
+    },
+    "/api/v1/reservations/{reservation_id}/status": {
+      "patch": {
+        "operationId": "change_reservation_status_api_v1_reservations__reservation_id__status_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "reservation_id",
+            "required": true,
+            "schema": {
+              "title": "Reservation Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Reserved endpoint; implementation is pending."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Change reservation status (reserved)",
+        "tags": [
+          "reservation",
+          "reservation"
+        ],
+        "x-implementation-status": "reserved",
+        "x-requirement": "FR-RES-05/FR-RES-06"
+      }
+    },
+    "/api/v1/reviews": {
+      "get": {
+        "operationId": "list_reviews_api_v1_reviews_get",
+        "responses": {
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Reserved endpoint; implementation is pending."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List ranked dish reviews (reserved)",
+        "tags": [
+          "review",
+          "review"
+        ],
+        "x-implementation-status": "reserved",
+        "x-requirement": "FR-REV-03"
+      }
+    },
+    "/api/v1/reviews/": {
+      "post": {
+        "description": "Create a review; it enters the moderation queue as PENDING (FR-REV-05).",
+        "operationId": "create_review_api_v1_reviews__post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_ReviewResponse_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Submit an order-verified review",
+        "tags": [
+          "review",
+          "review"
+        ]
+      }
+    },
+    "/api/v1/reviews/moderation": {
+      "get": {
+        "operationId": "moderation_queue_api_v1_reviews_moderation_get",
+        "responses": {
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Reserved endpoint; implementation is pending."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List the moderation queue (reserved)",
+        "tags": [
+          "review",
+          "review"
+        ],
+        "x-implementation-status": "reserved",
+        "x-requirement": "FR-REV-05"
+      }
+    },
+    "/api/v1/reviews/{review_id}/moderation": {
+      "patch": {
+        "operationId": "moderate_review_api_v1_reviews__review_id__moderation_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "review_id",
+            "required": true,
+            "schema": {
+              "title": "Review Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Reserved endpoint; implementation is pending."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Approve or reject a review (reserved)",
+        "tags": [
+          "review",
+          "review"
+        ],
+        "x-implementation-status": "reserved",
+        "x-requirement": "FR-REV-05"
+      }
+    },
+    "/api/v1/staff/orders": {
+      "get": {
+        "description": "List customer orders for staff (FR-ORD-04).",
+        "operationId": "get_orders_api_v1_staff_orders_get",
+        "responses": {
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Reserved endpoint; implementation is pending."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List customer orders (reserved)",
+        "tags": [
+          "staff",
+          "staff"
+        ],
+        "x-implementation-status": "reserved",
+        "x-requirement": "FR-ORD-04"
+      }
+    },
+    "/api/v1/staff/orders/{order_id}": {
+      "patch": {
+        "description": "Update an order's status (FR-ORD-04).",
+        "operationId": "update_order_status_api_v1_staff_orders__order_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "order_id",
+            "required": true,
+            "schema": {
+              "title": "Order Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Reserved endpoint; implementation is pending."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update order status (reserved)",
+        "tags": [
+          "staff",
+          "staff"
+        ],
+        "x-implementation-status": "reserved",
+        "x-requirement": "FR-ORD-04"
+      }
+    },
+    "/api/v1/staff/reservations": {
+      "get": {
+        "description": "List all reservations for staff (FR-RES-06).",
+        "operationId": "get_reservations_api_v1_staff_reservations_get",
+        "responses": {
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Reserved endpoint; implementation is pending."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List reservations (reserved)",
+        "tags": [
+          "staff",
+          "staff"
+        ],
+        "x-implementation-status": "reserved",
+        "x-requirement": "FR-RES-06"
+      }
+    },
+    "/api/v1/staff/reservations/{reservation_id}": {
+      "patch": {
+        "description": "Update a reservation's status (FR-RES-06).",
+        "operationId": "update_reservation_status_api_v1_staff_reservations__reservation_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "reservation_id",
+            "required": true,
+            "schema": {
+              "title": "Reservation Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Reserved endpoint; implementation is pending."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update reservation status (reserved)",
+        "tags": [
+          "staff",
+          "staff"
+        ],
+        "x-implementation-status": "reserved",
+        "x-requirement": "FR-RES-06"
+      }
+    },
+    "/api/v1/users": {
+      "post": {
+        "operationId": "create_user_api_v1_users_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Reserved endpoint; implementation is pending."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create a staff account (reserved)",
+        "tags": [
+          "users"
+        ],
+        "x-implementation-status": "reserved",
+        "x-requirement": "FR-MEM-02/FR-MEM-06"
+      }
+    },
+    "/api/v1/users/{user_id}/role": {
+      "patch": {
+        "operationId": "change_role_api_v1_users__user_id__role_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Reserved endpoint; implementation is pending."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Change a user role (reserved)",
+        "tags": [
+          "users"
+        ],
+        "x-implementation-status": "reserved",
+        "x-requirement": "FR-MEM-02/FR-MEM-06"
+      }
+    },
+    "/api/v1/users/{user_id}/status": {
+      "patch": {
+        "operationId": "change_status_api_v1_users__user_id__status_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Reserved endpoint; implementation is pending."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Change a user account status (reserved)",
+        "tags": [
+          "users"
+        ],
+        "x-implementation-status": "reserved",
+        "x-requirement": "FR-MEM-02/FR-MEM-06"
+      }
+    }
+  }
+}
