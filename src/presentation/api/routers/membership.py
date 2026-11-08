@@ -21,13 +21,18 @@ from src.application.membership.service import (
     csrf_for,
     user_out,
 )
+from src.common.envelope import Envelope, failure, paginate, success
+from src.common.errors import ErrorCode, message_for
 from src.common.security import CurrentUser, InvalidTokenError, Role, TokenPayload, require_roles
 from src.data.database import get_session_factory
 from src.data.repository.membership import MembershipRepository
 
 REFRESH_COOKIE = "restaurant_refresh"
 COOKIE_PATH = "/api/v1/auth"
-router = APIRouter(prefix="/api/v1", tags=["membership"])
+# Auth/admin use their frozen /api/v1 paths; the shared loader separately
+# mounts `router` at /api/v1/membership. Do not prefix the same router twice.
+auth_router = APIRouter(prefix="/api/v1", tags=["membership"])
+router = APIRouter(tags=["membership"])
 limiter = Limiter(key_func=get_remote_address)
 
 
@@ -104,6 +109,7 @@ class UserPage(BaseModel):
     total: int
     page: int
     page_size: int
+    total_pages: int
 
 
 def membership_session(request: Request) -> Generator[Session, None, None]:
@@ -164,24 +170,25 @@ def _login_response(request: Request, response: Response, result: LoginResult) -
         path=COOKIE_PATH,
     )
     _no_store(response)
-    return result.data
+    return success(result.data, request_id=getattr(request.state, "request_id", None))
 
 
-@router.post("/auth/register", response_model=UserOut, status_code=201)
+@auth_router.post("/auth/register", response_model=Envelope[UserOut], status_code=201)
 @limiter.limit("5/minute")
 def register(
     request: Request, response: Response, body: RegisterIn, svc: Service
 ) -> dict[str, Any]:
     _origin(request)
     _no_store(response)
-    return svc.register(
+    data = svc.register(
         email=str(body.email),
         password=body.password.get_secret_value(),
         display_name=body.display_name,
     )
+    return success(data, request_id=getattr(request.state, "request_id", None))
 
 
-@router.post("/auth/login", response_model=LoginOut)
+@auth_router.post("/auth/login", response_model=Envelope[LoginOut])
 @limiter.limit("5/minute")
 def login(request: Request, response: Response, body: LoginIn, svc: Service) -> dict[str, Any]:
     _origin(request)
@@ -189,26 +196,29 @@ def login(request: Request, response: Response, body: LoginIn, svc: Service) -> 
     return _login_response(request, response, result)
 
 
-@router.get("/auth/csrf")
-def csrf(request: Request, response: Response) -> dict[str, str]:
+@auth_router.get("/auth/csrf", response_model=Envelope[dict[str, str]])
+def csrf(request: Request, response: Response) -> dict[str, Any]:
     _origin(request)
     refresh = request.cookies.get(REFRESH_COOKIE)
     if not refresh:
-        raise HTTPException(401, "Not authenticated", headers={"WWW-Authenticate": "Bearer"})
+        raise MembershipError(401, "Not authenticated", code=ErrorCode.CREDENTIALS_MISSING)
     _no_store(response)
-    return {"csrf_token": csrf_for(refresh, request.app.state.settings)}
+    return success(
+        {"csrf_token": csrf_for(refresh, request.app.state.settings)},
+        request_id=getattr(request.state, "request_id", None),
+    )
 
 
-@router.post("/auth/refresh", response_model=LoginOut)
+@auth_router.post("/auth/refresh", response_model=Envelope[LoginOut])
 def refresh_session(request: Request, response: Response, svc: Service) -> dict[str, Any]:
     refresh = _csrf(request)
     if not refresh or len(refresh) > 256:
-        raise HTTPException(401, "Invalid credentials", headers={"WWW-Authenticate": "Bearer"})
+        raise MembershipError(401, "Invalid credentials")
     return _login_response(request, response, svc.refresh(refresh))
 
 
-@router.post("/auth/logout")
-def logout(request: Request, response: Response, svc: Service) -> dict[str, bool]:
+@auth_router.post("/auth/logout", response_model=Envelope[dict[str, bool]])
+def logout(request: Request, response: Response, svc: Service) -> dict[str, Any]:
     svc.logout(_csrf(request))
     response.delete_cookie(
         REFRESH_COOKIE,
@@ -218,17 +228,23 @@ def logout(request: Request, response: Response, svc: Service) -> dict[str, bool
         samesite="strict",
     )
     _no_store(response)
-    return {"logged_out": True}
+    return success({"logged_out": True}, request_id=getattr(request.state, "request_id", None))
 
 
-@router.get("/membership/profile", response_model=UserOut)
-def profile(response: Response, identity: CurrentUser, svc: Service) -> dict[str, Any]:
+@router.get("/profile", response_model=Envelope[UserOut])
+def profile(
+    request: Request, response: Response, identity: CurrentUser, svc: Service
+) -> dict[str, Any]:
     _no_store(response)
-    return user_out(svc.validate_identity(identity))
+    return success(
+        user_out(svc.validate_identity(identity)),
+        request_id=getattr(request.state, "request_id", None),
+    )
 
 
-@router.get("/users", response_model=UserPage)
+@auth_router.get("/users", response_model=Envelope[UserPage])
 def users(
+    request: Request,
     response: Response,
     identity: Admin,
     svc: Service,
@@ -236,21 +252,24 @@ def users(
     page_size: Annotated[int, Query(ge=1, le=100)] = 20,
 ) -> dict[str, Any]:
     _no_store(response)
-    return {
-        "items": [
-            user_out(user)
-            for user in svc.repo.list_users(
-                offset=(page - 1) * page_size,
-                limit=page_size,
-            )
-        ],
-        "total": svc.repo.user_count(),
-        "page": page,
-        "page_size": page_size,
-    }
+    return success(
+        paginate(
+            [
+                user_out(user)
+                for user in svc.repo.list_users(
+                    offset=(page - 1) * page_size,
+                    limit=page_size,
+                )
+            ],
+            total=svc.repo.user_count(),
+            page=page,
+            page_size=page_size,
+        ),
+        request_id=getattr(request.state, "request_id", None),
+    )
 
 
-@router.post("/users", response_model=UserOut, status_code=201)
+@auth_router.post("/users", response_model=Envelope[UserOut], status_code=201)
 def create_user(
     request: Request,
     response: Response,
@@ -259,7 +278,7 @@ def create_user(
     svc: Service,
 ) -> dict[str, Any]:
     _no_store(response)
-    return svc.register(
+    data = svc.register(
         email=str(body.email),
         password=body.password.get_secret_value(),
         display_name=body.display_name,
@@ -267,9 +286,10 @@ def create_user(
         actor=identity,
         request_id=getattr(request.state, "request_id", None),
     )
+    return success(data, request_id=getattr(request.state, "request_id", None))
 
 
-@router.patch("/users/{user_id}/role", response_model=UserOut)
+@auth_router.patch("/users/{user_id}/role", response_model=Envelope[UserOut])
 def change_role(
     request: Request,
     response: Response,
@@ -279,16 +299,17 @@ def change_role(
     svc: Service,
 ) -> dict[str, Any]:
     _no_store(response)
-    return svc.change_user(
+    data = svc.change_user(
         user_id,
         actor=identity,
         role=body.role,
         version=body.version,
         request_id=getattr(request.state, "request_id", None),
     )
+    return success(data, request_id=getattr(request.state, "request_id", None))
 
 
-@router.patch("/users/{user_id}/status", response_model=UserOut)
+@auth_router.patch("/users/{user_id}/status", response_model=Envelope[UserOut])
 def change_status(
     request: Request,
     response: Response,
@@ -298,13 +319,14 @@ def change_status(
     svc: Service,
 ) -> dict[str, Any]:
     _no_store(response)
-    return svc.change_user(
+    data = svc.change_user(
         user_id,
         actor=identity,
         is_active=body.is_active,
         version=body.version,
         request_id=getattr(request.state, "request_id", None),
     )
+    return success(data, request_id=getattr(request.state, "request_id", None))
 
 
 def install_membership(app: Any) -> None:
@@ -325,33 +347,43 @@ def install_membership(app: Any) -> None:
         headers = {"Cache-Control": "no-store"}
         if exc.status == 401:
             headers["WWW-Authenticate"] = "Bearer"
+        code = exc.code or {
+            401: ErrorCode.CREDENTIALS_INVALID,
+            403: ErrorCode.PERMISSION_DENIED,
+            404: ErrorCode.RESOURCE_NOT_FOUND,
+        }.get(exc.status, ErrorCode.VALIDATION_FAILED)
+        # Reuse the frozen catalogue; account-rule conflicts do not invent new
+        # codes or masquerade as an optimistic-lock failure.
+        detail = None
+        if code == ErrorCode.VALIDATION_FAILED:
+            detail = [{"field": "account", "detail": exc.message}]
         return JSONResponse(
             status_code=exc.status,
-            content={
-                "error": {
-                    "code": exc.status,
-                    "message": exc.message,
-                    "request_id": getattr(request.state, "request_id", None),
-                }
-            },
+            content=failure(
+                code,
+                request_id=getattr(request.state, "request_id", None),
+                errors=detail,
+            ),
             headers=headers,
         )
 
     async def rate_error(request: Request, exc: RateLimitExceeded) -> JSONResponse:
+        # The frozen catalogue has no rate-limit code. Preserve HTTP 429 and
+        # Retry-After, and provide field detail under existing validation 10001.
         return JSONResponse(
             status_code=429,
             headers={"Retry-After": "60", "Cache-Control": "no-store"},
-            content={
-                "error": {
-                    "code": 429,
-                    "message": "Too many attempts; retry later",
-                    "request_id": getattr(request.state, "request_id", None),
-                }
-            },
+            content=failure(
+                ErrorCode.VALIDATION_FAILED,
+                request_id=getattr(request.state, "request_id", None),
+                errors=[{"field": "request", "detail": "Too many attempts; retry later"}],
+            ),
         )
 
     async def revoked_identity(request: Request, exc: InvalidTokenError) -> JSONResponse:
-        return await member_error(request, MembershipError(401, "Not authenticated"))
+        return await member_error(
+            request, MembershipError(401, message_for(ErrorCode.CREDENTIALS_INVALID))
+        )
 
     app.state.auth_validator = validate
     limiter.enabled = app.state.settings.rate_limit_enabled
@@ -359,4 +391,4 @@ def install_membership(app: Any) -> None:
     app.add_exception_handler(MembershipError, member_error)
     app.add_exception_handler(InvalidTokenError, revoked_identity)
     app.add_exception_handler(RateLimitExceeded, rate_error)
-    app.include_router(router)
+    app.include_router(auth_router)

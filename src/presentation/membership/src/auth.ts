@@ -17,26 +17,63 @@ interface LoginResponse {
   csrf_token: string
   user: User
 }
-export interface UserPage { items: User[]; total: number; page: number; page_size: number }
+export interface UserPage {
+  items: User[]
+  total: number
+  page: number
+  page_size: number
+  total_pages: number
+}
+interface Envelope<T> {
+  code: number
+  message: string
+  data: T | null
+  request_id: string | null
+  timestamp: string
+}
 export const roleNames: Record<Role, string> = {
   customer: '顾客', waiter: '服务员', manager: '经理', admin: '管理员',
 }
 
 export class ApiError extends Error {
-  constructor(public status: number, message: string, public requestId?: string) {
+  constructor(
+    public status: number,
+    message: string,
+    public requestId?: string,
+    public code?: number,
+  ) {
     super(message)
   }
 }
 
+function isEnvelope(value: unknown): value is Envelope<unknown> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
+  const body = value as Record<string, unknown>
+  return Number.isInteger(body.code)
+    && typeof body.message === 'string'
+    && 'data' in body
+    && (body.request_id === null || typeof body.request_id === 'string')
+    && typeof body.timestamp === 'string'
+    && body.timestamp.length > 0
+}
+
 async function responseData<T>(response: Response): Promise<T> {
-  const body = await response.json().catch(() => null)
-  if (!response.ok) {
+  const body: unknown = await response.json().catch(() => null)
+  if (!response.ok || (isEnvelope(body) && body.code !== 0)) {
     const fallback = response.status === 422
       ? '请检查邮箱、密码长度及表单内容。'
       : response.status === 429 ? '操作过于频繁，请稍后再试。' : '请求失败，请稍后重试。'
-    throw new ApiError(response.status, body?.error?.message || fallback, body?.error?.request_id)
+    throw new ApiError(
+      response.status,
+      isEnvelope(body) ? body.message || fallback : fallback,
+      isEnvelope(body) ? body.request_id || undefined : undefined,
+      isEnvelope(body) ? body.code : undefined,
+    )
   }
-  return body as T
+  if (!isEnvelope(body)) {
+    throw new ApiError(response.status, '服务返回了无法识别的数据，请稍后重试。')
+  }
+  return body.data as T
 }
 
 function send(path: string, options: RequestInit = {}): Promise<Response> {

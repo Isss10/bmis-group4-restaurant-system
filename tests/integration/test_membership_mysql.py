@@ -11,6 +11,7 @@ import os
 import secrets
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
 from pathlib import Path
 from threading import Barrier
 from typing import Any
@@ -22,6 +23,7 @@ from sqlalchemy import MetaData, func, inspect, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from src.application.membership.service import MembershipError, MembershipService
+from src.application.reservation.models import Reservation, ReservationStatus
 from src.common.audit import AuditLog
 from src.common.config import Settings, get_settings
 from src.common.security import (
@@ -246,47 +248,83 @@ def test_alembic_up_down_up_builds_membership_from_empty_mysql(
 ) -> None:
     """Own only an initially empty restaurant_test schema; never erase other data."""
     engine = get_engine()
-    if inspect(engine).get_table_names():
-        pytest.fail("Fresh-migration check requires empty restaurant_test; refusing to erase data")
     root = Path(__file__).resolve().parents[2]
     cfg = Config(str(root / "alembic.ini"))
     cfg.set_main_option("script_location", str(root / "src/data/migration"))
     cfg.set_main_option("prepend_sys_path", str(root))
     cfg.set_main_option("path_separator", "os")
+    tables = set(inspect(engine).get_table_names())
+    if tables - {"alembic_version"}:
+        pytest.fail("Fresh-migration check requires empty restaurant_test; refusing to erase data")
+    if "alembic_version" in tables:
+        # The CI migration smoke test leaves this marker; the preceding shared
+        # db_session fixtures remove mapped tables but not Alembic's table.
+        # Reset only that marker after proving no business tables remain.
+        with engine.connect() as connection:
+            versions = set(connection.scalars(text("SELECT version_num FROM alembic_version")))
+        if versions - {"0004"}:
+            pytest.fail("Unexpected scratch migration marker; refusing to reset it")
+        command.stamp(cfg, "base")
     expected = {
         User.__tablename__,
         AuthSession.__tablename__,
         UsedRefreshToken.__tablename__,
         AuthPolicyLock.__tablename__,
         AuditLog.__tablename__,
+        Reservation.__tablename__,
     }
     try:
-        command.upgrade(cfg, "head")
-        assert expected <= set(inspect(engine).get_table_names())
+        # Start at the exact latest-main revision, with pre-existing data, to
+        # prove this PR can upgrade a teammate's database without rebuilding it.
+        command.upgrade(cfg, "0003")
+        main_tables = set(inspect(engine).get_table_names())
         with Session(engine) as session:
-            assert session.get(AuthPolicyLock, 1) is not None
             audit = AuditLog(
-                action="user.status_changed",
-                entity_type="User",
+                action="reservation.created",
+                entity_type="Reservation",
                 entity_id="historical",
-                after={"is_active": False},
+                after={"status": "CONFIRMED"},
             )
-            session.add(audit)
+            reservation = Reservation(
+                user_id="existing-main-customer",
+                table_id=3,
+                reservation_time=datetime(2026, 11, 23, 12),
+                status=ReservationStatus.CONFIRMED,
+                created_at=datetime(2026, 11, 8, 12),
+            )
+            session.add_all([audit, reservation])
             session.commit()
             audit_id = audit.id
+            reservation_id = reservation.id
+        for operation in ("upgrade", "downgrade", "upgrade"):
+            if operation == "upgrade":
+                command.upgrade(cfg, "head")
+                assert expected <= set(inspect(engine).get_table_names())
+            else:
+                command.downgrade(cfg, "0003")
+                assert set(inspect(engine).get_table_names()) == main_tables
+            with Session(engine) as session:
+                retained = session.get(AuditLog, audit_id)
+                assert retained is not None and retained.entity_id == "historical"
+                assert retained.after == {"status": "CONFIRMED"}
+                booking = session.get(Reservation, reservation_id)
+                assert booking is not None and booking.user_id == "existing-main-customer"
+                assert booking.status == ReservationStatus.CONFIRMED
+                if operation == "upgrade":
+                    assert session.get(AuthPolicyLock, 1) is not None
+                    assert session.scalar(select(func.count()).select_from(User)) == 0
+
+        # Rolling back 0004 preserves main's data; deliberately rolling all the
+        # way back also runs 0002/0003's original destructive downgrades.
         command.downgrade(cfg, "base")
-        assert set(inspect(engine).get_table_names()) == {"audit_logs", "alembic_version"}
-        with Session(engine) as session:
-            retained = session.get(AuditLog, audit_id)
-            assert retained is not None and retained.entity_id == "historical"
-            assert retained.after == {"is_active": False}
+        assert set(inspect(engine).get_table_names()) == {"alembic_version"}
         command.upgrade(cfg, "head")
         assert expected <= set(inspect(engine).get_table_names())
         with Session(engine) as session:
             assert session.get(AuthPolicyLock, 1) is not None
             assert session.scalar(select(func.count()).select_from(User)) == 0
-            assert session.get(AuditLog, audit_id) is not None
-            assert session.scalar(select(func.count()).select_from(AuditLog)) == 1
+            assert session.scalar(select(func.count()).select_from(AuditLog)) == 0
+            assert session.scalar(select(func.count()).select_from(Reservation)) == 0
     finally:
         # The schema was verified empty before this test created anything.
         # MySQL DDL is not transactional: clean up even partially applied DDL.

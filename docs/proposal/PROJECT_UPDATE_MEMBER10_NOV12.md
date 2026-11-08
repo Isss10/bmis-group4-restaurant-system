@@ -1,5 +1,8 @@
 # Member10 — 12 November early-delivery contribution
 
+> Historical early-delivery record. Current migration, contract and integration
+> results are in [the November 23 delivery](PROJECT_UPDATE_MEMBER10_NOV23.md).
+
 Task: **T4 Membership & Loyalty**, jointly assigned to Member10 and Member4.
 This contribution implements Member10's authentication and permission slice.
 12 November is the user's requested early delivery; the proposal's full T4

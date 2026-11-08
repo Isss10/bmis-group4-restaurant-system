@@ -7,25 +7,42 @@ not evidence for MySQL locking or concurrent authentication behaviour.
 from __future__ import annotations
 
 import importlib.util
+from argparse import Namespace
+from datetime import datetime
 from io import StringIO
 from pathlib import Path
 from types import ModuleType
 
 import pytest
+from alembic import command
+from alembic.autogenerate import compare_metadata
+from alembic.config import Config
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
+from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine, insert, inspect, select, text
 from sqlalchemy.exc import IntegrityError
 
+from src.application.reservation.models import Reservation, ReservationStatus
 from src.common.audit import AuditLog
+from src.data.database import Base
 from src.data.schema.membership import AuthPolicyLock, AuthSession, UsedRefreshToken, User
+
+_ROOT = Path(__file__).resolve().parents[2]
+_AUTH_TABLES = {
+    model.__tablename__ for model in (User, AuthPolicyLock, AuthSession, UsedRefreshToken)
+}
+
+
+def _alembic_config(url: str) -> Config:
+    config = Config(str(_ROOT / "alembic.ini"))
+    config.set_main_option("script_location", str(_ROOT / "src/data/migration"))
+    config.cmd_opts = Namespace(x=[f"url={url}"])  # type: ignore[assignment]
+    return config
 
 
 def _migration() -> ModuleType:
-    path = (
-        Path(__file__).resolve().parents[2]
-        / "src/data/migration/versions/0002_add_membership_auth.py"
-    )
+    path = _ROOT / "src/data/migration/versions/0004_add_membership_auth.py"
     spec = importlib.util.spec_from_file_location("membership_auth_revision", path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
@@ -36,6 +53,8 @@ def _migration() -> ModuleType:
 def test_auth_migration_matches_model_and_seeds_lock() -> None:
     engine = create_engine("sqlite://")
     with engine.begin() as connection:
+        # The prior main-branch migration owns this table, not revision 0004.
+        AuditLog.__table__.create(connection)
         with Operations.context(MigrationContext.configure(connection)):
             _migration().upgrade()
         inspector = inspect(connection)
@@ -78,12 +97,12 @@ def test_migrated_database_enforces_unique_email_and_roles() -> None:
     engine.dispose()
 
 
-@pytest.mark.parametrize("preexisting", [False, True])
-def test_downgrade_preserves_audit_history_and_reupgrade(preexisting: bool) -> None:
+@pytest.mark.parametrize("extra_audit_column", [False, True])
+def test_downgrade_preserves_audit_history_and_reupgrade(extra_audit_column: bool) -> None:
     engine = create_engine("sqlite://")
     with engine.begin() as connection:
-        if preexisting:
-            AuditLog.__table__.create(connection)
+        AuditLog.__table__.create(connection)
+        if extra_audit_column:
             connection.execute(text("ALTER TABLE audit_logs ADD COLUMN legacy_marker VARCHAR(20)"))
         context = MigrationContext.configure(connection)
         migration = _migration()
@@ -100,7 +119,7 @@ def test_downgrade_preserves_audit_history_and_reupgrade(preexisting: bool) -> N
         assert "users" not in tables
         assert "auth_sessions" not in tables
         assert connection.scalar(select(AuditLog.action)) == "user.role_changed"
-        if preexisting:
+        if extra_audit_column:
             assert "legacy_marker" in {
                 column["name"] for column in inspect(connection).get_columns("audit_logs")
             }
@@ -111,7 +130,7 @@ def test_downgrade_preserves_audit_history_and_reupgrade(preexisting: bool) -> N
     engine.dispose()
 
 
-def test_offline_mysql_migration_contains_safe_audit_ddl() -> None:
+def test_offline_mysql_migration_owns_auth_tables_only() -> None:
     output = StringIO()
     context = MigrationContext.configure(
         dialect_name="mysql", opts={"as_sql": True, "output_buffer": output}
@@ -119,6 +138,99 @@ def test_offline_mysql_migration_contains_safe_audit_ddl() -> None:
     with Operations.context(context):
         _migration().upgrade()
     ddl = output.getvalue()
-    assert "CREATE TABLE IF NOT EXISTS audit_logs" in ddl
-    assert "INDEX ix_audit_entity (entity_type, entity_id)" in ddl
+    assert "audit_logs" not in ddl
+    assert "reservations" not in ddl
+    for table in _AUTH_TABLES:
+        assert f"CREATE TABLE {table}" in ddl
     assert "INSERT INTO auth_policy_lock (id) VALUES (1)" in ddl
+
+
+def test_membership_is_the_single_head_after_main_migrations() -> None:
+    script = ScriptDirectory.from_config(_alembic_config("sqlite://"))
+    assert script.get_heads() == ["0004"]
+    assert [revision.revision for revision in script.walk_revisions()] == [
+        "0004",
+        "0003",
+        "0002",
+        "0001",
+    ]
+    assert _migration().down_revision == "0003"
+
+
+def test_main_database_upgrade_and_module_rollback_preserve_business_data(tmp_path: Path) -> None:
+    url = f"sqlite:///{(tmp_path / 'main_upgrade.db').as_posix()}"
+    config = _alembic_config(url)
+    engine = create_engine(url)
+    try:
+        command.upgrade(config, "0003")
+        with engine.begin() as connection:
+            before_tables = set(inspect(connection).get_table_names())
+            connection.execute(
+                insert(AuditLog),
+                {
+                    "id": 41,
+                    "action": "reservation.created",
+                    "entity_type": "Reservation",
+                    "entity_id": "51",
+                },
+            )
+            connection.execute(
+                insert(Reservation),
+                {
+                    "id": 51,
+                    "user_id": "existing-main-customer",
+                    "table_id": 3,
+                    "reservation_time": datetime(2026, 11, 23, 12),
+                    "status": ReservationStatus.CONFIRMED,
+                    "created_at": datetime(2026, 11, 8, 12),
+                },
+            )
+            original_audit = connection.execute(select(AuditLog)).mappings().one()
+            original_reservation = connection.execute(select(Reservation)).mappings().one()
+
+        for operation in ("upgrade", "downgrade", "upgrade"):
+            if operation == "upgrade":
+                command.upgrade(config, "head")
+            else:
+                command.downgrade(config, "0003")
+            with engine.connect() as connection:
+                assert connection.execute(select(AuditLog)).mappings().one() == original_audit
+                assert (
+                    connection.execute(select(Reservation)).mappings().one() == original_reservation
+                )
+                tables = set(inspect(connection).get_table_names())
+                assert tables == (
+                    before_tables | _AUTH_TABLES if operation == "upgrade" else before_tables
+                )
+                if operation == "upgrade":
+                    assert connection.scalar(select(AuthPolicyLock.id)) == 1
+
+        command.downgrade(config, "base")
+        with engine.connect() as connection:
+            assert set(inspect(connection).get_table_names()) == {"alembic_version"}
+        command.upgrade(config, "head")
+        with engine.connect() as connection:
+            assert set(inspect(connection).get_table_names()) == before_tables | _AUTH_TABLES
+    finally:
+        engine.dispose()
+
+
+def test_auth_migration_has_no_autogenerate_drift(tmp_path: Path) -> None:
+    url = f"sqlite:///{(tmp_path / 'auth_drift.db').as_posix()}"
+    command.upgrade(_alembic_config(url), "head")
+    engine = create_engine(url)
+    try:
+        with engine.connect() as connection:
+            context = MigrationContext.configure(
+                connection,
+                opts={
+                    "compare_type": True,
+                    "compare_server_default": True,
+                    "include_object": lambda obj, name, kind, reflected, compare_to: (
+                        name in _AUTH_TABLES if kind == "table" else True
+                    ),
+                },
+            )
+            assert compare_metadata(context, Base.metadata) == []
+    finally:
+        engine.dispose()

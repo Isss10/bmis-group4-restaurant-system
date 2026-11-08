@@ -1,5 +1,6 @@
 from datetime import datetime
 
+from src.common.errors import permission_denied
 from src.data.database import session_scope
 
 from .models import Reservation, ReservationStatus
@@ -26,7 +27,13 @@ class ReservationRepository:
                 "status": res_status,
             }
 
-    def update_status(self, reservation_id: int, status: ReservationStatus) -> dict | None:
+    def update_status(
+        self,
+        reservation_id: int,
+        status: ReservationStatus,
+        *,
+        user_id: str | None = None,
+    ) -> dict | None:
         with session_scope() as session:
             reservation = (
                 session.query(Reservation)
@@ -36,6 +43,10 @@ class ReservationRepository:
             )
             if not reservation:
                 return None
+            # The public cancellation route always supplies its verified subject.
+            # Check after locking, within the same transaction as the update.
+            if user_id is not None and reservation.user_id != user_id:
+                raise permission_denied()
             reservation.status = status  # type: ignore
             session.flush()
             session.refresh(reservation)

@@ -14,6 +14,7 @@ from sqlalchemy.exc import IntegrityError
 
 from src.common.audit import ACTION_USER_ROLE_CHANGED, record_audit
 from src.common.config import Settings
+from src.common.errors import ErrorCode
 from src.common.security import (
     InvalidTokenError,
     Role,
@@ -27,9 +28,10 @@ from src.data.schema.membership import AuthSession, User
 
 
 class MembershipError(Exception):
-    def __init__(self, status: int, message: str) -> None:
+    def __init__(self, status: int, message: str, *, code: ErrorCode | None = None) -> None:
         self.status = status
         self.message = message
+        self.code = code
         super().__init__(message)
 
 
@@ -221,7 +223,9 @@ class MembershipService:
             if user is None:
                 raise MembershipError(404, "Account not found")
             if user.version != version:
-                raise MembershipError(409, "Account changed; reload before retrying")
+                raise MembershipError(
+                    409, "Account changed; reload before retrying", code=ErrorCode.STALE_VERSION
+                )
             before = {"role": user.role, "is_active": user.is_active}
             next_role = str(role) if role is not None else user.role
             next_active = is_active if is_active is not None else user.is_active

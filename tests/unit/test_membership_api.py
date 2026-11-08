@@ -24,6 +24,7 @@ from sqlalchemy.pool import StaticPool
 from src.application.membership.service import MembershipError, MembershipService
 from src.common.audit import AuditLog
 from src.common.config import Settings
+from src.common.errors import ErrorCode
 from src.common.security import (
     Role,
     TokenPayload,
@@ -57,7 +58,7 @@ class AuthHarness:
             headers={"Origin": ORIGIN},
         )
         assert response.status_code == 200, response.text
-        return response.json()
+        return assert_success(response)
 
     def bearer(self, data: dict[str, Any]) -> dict[str, str]:
         return {"Authorization": f"Bearer {data['access_token']}"}
@@ -117,17 +118,37 @@ def auth_harness(
         engine.dispose()
 
 
-def assert_error(response: Any, status: int) -> dict[str, Any]:
+def assert_success(response: Any) -> dict[str, Any]:
+    assert response.status_code in {200, 201}, response.text
+    body = response.json()
+    assert set(body) == {"code", "message", "data", "request_id", "timestamp"}
+    assert body["code"] == 0 and body["message"] == "ok"
+    assert body["request_id"] == response.headers["X-Request-ID"]
+    assert body["timestamp"].endswith("Z")
+    return body["data"]
+
+
+def assert_error(response: Any, status: int, code: int | None = None) -> dict[str, Any]:
     assert response.status_code == status, response.text
     body = response.json()
-    assert "error" in body
-    error = body["error"]
-    assert error["code"] == status
-    assert error["message"]
-    assert error["request_id"] == response.headers["X-Request-ID"]
+    assert "error" not in body
+    expected = {
+        401: {30001, 30002},
+        403: {30003},
+        404: {40001},
+        409: {10001, 20004},
+        422: {10001},
+        429: {10001},
+        500: {50001},
+    }
+    assert body["code"] == code if code is not None else body["code"] in expected[status]
+    assert body["message"]
+    assert body["data"] is None
+    assert body["timestamp"].endswith("Z")
+    assert body["request_id"] == response.headers["X-Request-ID"]
     if status == 401:
         assert response.headers["WWW-Authenticate"] == "Bearer"
-    return error
+    return body
 
 
 def register_body(harness: AuthHarness, **changes: Any) -> dict[str, Any]:
@@ -156,7 +177,7 @@ def test_registration_persists_only_password_hash_and_customer_role(
         json=register_body(auth_harness, email="New.Customer@EXAMPLE.COM"),
     )
     assert response.status_code == 201, response.text
-    user = response.json()
+    user = assert_success(response)
     assert set(user) == USER_FIELDS
     assert user["email"] == "new.customer@example.com"
     assert user["role"] == "customer"
@@ -232,15 +253,15 @@ def test_four_roles_login_and_resolve_only_their_own_identity(
         "/api/v1/auth/me", headers=auth_harness.bearer(login), params={"user_id": "9999"}
     )
     assert identity.status_code == 200, identity.text
-    assert set(identity.json()) == {"user_id", "role", "token_id", "expires_at"}
-    assert identity.json()["user_id"] == str(auth_harness.user_ids[role])
-    assert identity.json()["role"] == role.value
+    assert set(assert_success(identity)) == {"user_id", "role", "token_id", "expires_at"}
+    assert assert_success(identity)["user_id"] == str(auth_harness.user_ids[role])
+    assert assert_success(identity)["role"] == role.value
     profile = auth_harness.client.get(
         "/api/v1/membership/profile", headers=auth_harness.bearer(login)
     )
     assert profile.status_code == 200, profile.text
-    assert set(profile.json()) == USER_FIELDS
-    assert profile.json()["id"] == auth_harness.user_ids[role]
+    assert set(assert_success(profile)) == USER_FIELDS
+    assert assert_success(profile)["id"] == auth_harness.user_ids[role]
 
 
 def test_login_failure_does_not_disclose_account_existence(auth_harness: AuthHarness) -> None:
@@ -253,7 +274,7 @@ def test_login_failure_does_not_disclose_account_existence(auth_harness: AuthHar
         error = assert_error(response, 401)
         failures.append((error["code"], error["message"]))
         assert REFRESH_COOKIE not in response.headers.get("Set-Cookie", "")
-        assert "access_token" not in response.json()
+        assert response.json()["data"] is None
     assert failures[0] == failures[1]
     with auth_harness.factory() as session:
         assert session.scalar(select(func.count()).select_from(AuthSession)) == 0
@@ -261,7 +282,7 @@ def test_login_failure_does_not_disclose_account_existence(auth_harness: AuthHar
 
 @pytest.mark.parametrize("path", ["/api/v1/auth/me", "/api/v1/membership/profile", "/api/v1/users"])
 def test_protected_endpoints_require_authentication(auth_harness: AuthHarness, path: str) -> None:
-    assert_error(auth_harness.client.get(path), 401)
+    assert_error(auth_harness.client.get(path), 401, ErrorCode.CREDENTIALS_MISSING)
 
 
 @pytest.mark.parametrize("kind", ["forged", "expired", "missing_claim", "unknown_role"])
@@ -283,7 +304,7 @@ def test_invalid_access_token_fails_closed(auth_harness: AuthHarness, kind: str)
     response = auth_harness.client.get(
         "/api/v1/auth/me", headers={"Authorization": f"Bearer {invalid}"}
     )
-    assert_error(response, 401)
+    assert_error(response, 401, ErrorCode.CREDENTIALS_INVALID)
 
 
 def test_legacy_token_without_persisted_session_is_rejected(auth_harness: AuthHarness) -> None:
@@ -326,7 +347,7 @@ def test_refresh_rotates_cookie_and_replay_revokes_session(auth_harness: AuthHar
     headers = auth_harness.cookie_headers(old_refresh, login["csrf_token"])
     refreshed = auth_harness.client.post("/api/v1/auth/refresh", headers=headers)
     assert refreshed.status_code == 200, refreshed.text
-    current = refreshed.json()
+    current = assert_success(refreshed)
     assert current["access_token"] != login["access_token"]
     assert auth_harness.client.cookies[REFRESH_COOKIE] != old_refresh
     assert (
@@ -409,7 +430,7 @@ def test_csrf_endpoint_supports_reload_without_disclosing_refresh_token(
     refresh = auth_harness.client.cookies[REFRESH_COOKIE]
     response = auth_harness.client.get("/api/v1/auth/csrf", headers={"Origin": ORIGIN})
     assert response.status_code == 200, response.text
-    assert response.json() == {"csrf_token": login["csrf_token"]}
+    assert assert_success(response) == {"csrf_token": login["csrf_token"]}
     assert refresh not in response.text
     assert response.headers["Cache-Control"] == "no-store"
     assert_error(
@@ -427,7 +448,7 @@ def test_logout_is_idempotent_and_only_revokes_current_session(auth_harness: Aut
     headers = auth_harness.cookie_headers(refresh, current["csrf_token"])
     response = auth_harness.client.post("/api/v1/auth/logout", headers=headers)
     assert response.status_code == 200, response.text
-    assert response.json() == {"logged_out": True}
+    assert assert_success(response) == {"logged_out": True}
     assert "Max-Age=0" in response.headers["Set-Cookie"]
     repeated = auth_harness.client.post("/api/v1/auth/logout", headers=headers)
     assert repeated.status_code == 200
@@ -487,13 +508,13 @@ def test_admin_creates_employee_with_audit_and_safe_paginated_listing(
         json=register_body(auth_harness, email="new.waiter@example.com", role="waiter"),
     )
     assert created.status_code == 201, created.text
-    assert set(created.json()) == USER_FIELDS
-    assert created.json()["role"] == "waiter"
+    assert set(assert_success(created)) == USER_FIELDS
+    assert assert_success(created)["role"] == "waiter"
     listing = auth_harness.client.get(
         "/api/v1/users", headers=headers, params={"page": 2, "page_size": 2}
     )
     assert listing.status_code == 200, listing.text
-    page = listing.json()
+    page = assert_success(listing)
     assert (page["total"], page["page"], page["page_size"], len(page["items"])) == (5, 2, 2, 2)
     assert all(set(user) == USER_FIELDS for user in page["items"])
     with auth_harness.factory() as session:
@@ -501,7 +522,7 @@ def test_admin_creates_employee_with_audit_and_safe_paginated_listing(
         assert audit is not None
         assert audit.action == "user.created"
         assert audit.actor_id == str(auth_harness.user_ids[Role.ADMIN])
-        assert audit.entity_id == str(created.json()["id"])
+        assert audit.entity_id == str(assert_success(created)["id"])
         assert audit.request_id == "a" * 32
         assert auth_harness.password not in json.dumps(audit.after)
 
@@ -530,9 +551,9 @@ def test_admin_changes_revoke_old_tokens_and_audit_the_same_change(
         json={**change, "version": 1},
     )
     assert response.status_code == 200, response.text
-    assert response.json()["version"] == 2
-    assert response.json()["role"] == expected_role
-    assert response.json()["is_active"] is expected_active
+    assert assert_success(response)["version"] == 2
+    assert assert_success(response)["role"] == expected_role
+    assert assert_success(response)["is_active"] is expected_active
     assert_error(
         auth_harness.client.get("/api/v1/auth/me", headers=auth_harness.bearer(previous)), 401
     )
@@ -560,7 +581,7 @@ def test_admin_changes_revoke_old_tokens_and_audit_the_same_change(
     )
     if expected_active:
         assert relogin.status_code == 200, relogin.text
-        assert relogin.json()["user"]["role"] == expected_role
+        assert assert_success(relogin)["user"]["role"] == expected_role
     else:
         assert_error(relogin, 401)
 
@@ -598,7 +619,7 @@ def test_stale_version_does_not_mutate_user_or_create_audit(auth_harness: AuthHa
         headers=auth_harness.bearer(admin),
         json={"role": "waiter", "version": 999},
     )
-    assert_error(response, 409)
+    assert_error(response, 409, ErrorCode.STALE_VERSION)
     with auth_harness.factory() as session:
         user = session.get(User, target)
         assert user is not None and user.role == "customer" and user.version == 1
@@ -731,7 +752,7 @@ def test_session_material_is_not_exposed_in_profile_or_stored_as_plaintext(
     assert raw_refresh not in profile.text
     assert login["access_token"] not in profile.text
     assert auth_harness.password not in profile.text
-    assert set(profile.json()) == USER_FIELDS
+    assert set(assert_success(profile)) == USER_FIELDS
 
 
 def test_sensitive_success_responses_disable_caching(auth_harness: AuthHarness) -> None:
@@ -741,7 +762,7 @@ def test_sensitive_success_responses_disable_caching(auth_harness: AuthHarness) 
         json={"email": "customer@example.com", "password": auth_harness.password},
     )
     assert login_response.status_code == 200
-    data = login_response.json()
+    data = assert_success(login_response)
     cookie = login_response.headers["Set-Cookie"]
     assert "HttpOnly" in cookie
     assert "SameSite=strict" in cookie
@@ -756,9 +777,25 @@ def test_sensitive_success_responses_disable_caching(auth_harness: AuthHarness) 
     assert refreshed.status_code == 200
     logged_out = auth_harness.client.post(
         "/api/v1/auth/logout",
-        headers={"Origin": ORIGIN, "X-CSRF-Token": refreshed.json()["csrf_token"]},
+        headers={"Origin": ORIGIN, "X-CSRF-Token": assert_success(refreshed)["csrf_token"]},
     )
     for response in (registered, login_response, csrf, profile, refreshed, logged_out):
         assert response.status_code in {200, 201}, response.text
         assert response.headers["Cache-Control"] == "no-store"
         assert response.headers["Pragma"] == "no-cache"
+
+
+def test_membership_routers_mount_once_at_frozen_paths(settings: Settings) -> None:
+    schema = create_app(settings).openapi()
+    paths = schema["paths"]
+    assert "/api/v1/auth/login" in paths
+    assert "/api/v1/membership/profile" in paths
+    assert "/api/v1/users" in paths
+    assert not any("/api/v1/membership/api/v1" in path for path in paths)
+    login_operations = [
+        method["operationId"]
+        for path, methods in paths.items()
+        for verb, method in methods.items()
+        if verb == "post" and path.endswith("/auth/login")
+    ]
+    assert len(login_operations) == 1
