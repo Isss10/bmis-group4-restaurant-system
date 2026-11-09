@@ -4,10 +4,14 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from src.application.review.exceptions import DishNotInOrderError
-from src.application.review.schemas import ReviewCreate, ReviewResponse
+from src.application.review.schemas import (
+    DishRankingResponse,
+    ReviewCreate,
+    ReviewResponse,
+)
 from src.application.review.service import submit_review
 from src.data.database import get_db
-from src.data.schema.review import Review
+from src.data.schema.review import DishRatingStats, Review
 
 router = APIRouter()
 
@@ -21,3 +25,13 @@ def create_review(payload: ReviewCreate, db: Annotated[Session, Depends(get_db)]
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         ) from e
+
+
+@router.get("/dishes/ranking", response_model=list[DishRankingResponse])
+def get_dish_bayesian_ranking(
+    db: Annotated[Session, Depends(get_db)], limit: int = 10
+) -> list[DishRatingStats]:
+    """Get dish ranking sorted by Bayesian average score descending."""
+    return (
+        db.query(DishRatingStats).order_by(DishRatingStats.bayesian_score.desc()).limit(limit).all()
+    )

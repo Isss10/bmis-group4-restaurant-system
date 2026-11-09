@@ -140,17 +140,25 @@ A staff member changing a reservation status:
 ```
 
 On any exception at step 6 or 7, `get_db` rolls back and the error handlers in
-`middleware.py` produce the standard envelope
-`{"error": {"code", "message", "request_id"}}` without leaking internals.
+`middleware.py` produce the frozen envelope —
+`{"code": 20001, "message": "...", "data": null, "request_id": "...", "timestamp": "..."}` —
+without leaking internals. `code` is a 5-digit business code from the frozen
+table (manual §4.3), *not* the HTTP status; both are carried, because the
+frontend switches on `code` while the transport switches on the status.
 
 ---
 
 ## 5. The booking critical section
 
 This is the technical core of the project (Objective d) and the part most likely
-to be examined closely. Three mechanisms, all required:
+to be examined closely. Three mechanisms, all required.
 
-### 5.1 Pessimistic lock — serialise the contenders
+**Isolation level: READ COMMITTED** (frozen contract, manual §5.3). This is not
+MySQL's default and the choice materially changes what each layer below does, so
+read this section with that level in mind — the behaviour of `FOR UPDATE`
+differs from what most tutorials describe, which assume REPEATABLE READ.
+
+### 5.1 Pessimistic lock — serialise contenders on an existing row
 
 ```python
 existing = lock_for_update(session, Reservation,
@@ -158,40 +166,106 @@ existing = lock_for_update(session, Reservation,
                            Reservation.slot_start == slot_start)
 ```
 
-`SELECT ... FOR UPDATE` takes an InnoDB exclusive row lock held until commit. A
-second concurrent transaction attempting the same select **blocks** rather than
-reading stale data. Without this, both requests read "no reservation exists" and
-both proceed to insert.
+`SELECT ... FOR UPDATE` takes an InnoDB exclusive record lock on **rows that
+actually exist**, held until commit. This is what protects the case two staff
+members hit at once: both try to change the *same* reservation's status, the
+second blocks until the first commits, and the optimistic lock (§5.2) then
+detects the lost update.
+
+**What it does *not* do under READ COMMITTED.** When the query matches no row —
+the common booking case, since the slot is free — InnoDB takes **no gap lock**
+at this isolation level. Two concurrent bookings for the same empty slot
+therefore both pass the existence check and both proceed to `INSERT`. They are
+*not* serialised here.
+
+This is deliberate, and it is why the three layers must be read together rather
+than as three independent guarantees:
+
+| Race | Caught by | Result |
+|---|---|---|
+| Two updates to one existing reservation | §5.1 record lock + §5.2 version check | second gets `20004` |
+| Two inserts into one free slot | §5.3 unique constraint | second gets `20001` |
+| Anything the above miss (a code path that forgot the lock) | §5.3 unique constraint | second gets `20001` |
+
+Under REPEATABLE READ the insert race *would* be serialised by gap locks — at
+the cost of frequent deadlocks between concurrent inserts into adjacent gaps,
+and phantom-read blocking on the hot booking path. The contract trades that for
+fewer deadlocks and relies on §5.3, which is a stronger guarantee anyway: a
+constraint cannot be forgotten by a code path the way a lock can.
 
 **Keep the locked region short.** No HTTP calls, no slow computation between
-locking and committing — a long-held lock under load produces lock-wait timeouts
-(MySQL default 50 s) and deadlocks.
+locking and committing — a long-held record lock under load produces lock-wait
+timeouts (MySQL default 50 s) and deadlocks.
 
 ### 5.2 Optimistic lock — detect lost updates
 
 SQLAlchemy's `version_id_col` increments a version column on every UPDATE and
 includes the expected version in the WHERE clause. If another transaction
 committed first, zero rows match and SQLAlchemy raises `StaleDataError` instead
-of silently overwriting. This covers updates to an existing reservation, which
-`FOR UPDATE` alone does not fully protect against at higher isolation subtleties.
+of silently overwriting. The service maps that to error code **20004**
+("data was modified by another request, refresh and retry").
+
+Its job is narrower than it looks: §5.1's record lock already serialises two
+writers on an *existing* row, so what the version check catches is a lost update
+where the second writer read the row before the first committed — and, more
+practically, any update path that did not take the lock at all. It is the
+cheapest layer to get wrong silently (no lock = no error = last write wins),
+which is why it is worth having even though §5.1 overlaps it.
 
 ### 5.3 Unique constraint — the database has the final say
-
-```sql
-UNIQUE KEY uq_reservations_table_slot (table_id, slot_date, slot_start)
-```
 
 This is the mechanism that makes the guarantee **real** rather than hopeful. If
 both application-level checks ever fail — a bug, a race in code nobody
 anticipated, a hand-written query that forgot the lock — MySQL itself rejects
-the duplicate row. The application catches `IntegrityError` and converts it into
-"this slot was just taken".
+the duplicate row. The service catches `IntegrityError` and maps it to error
+code **20001**.
 
-> **Why all three?** A unique constraint alone gives correctness but poor UX:
-> every conflict becomes an exception. Locking alone gives good UX but is
-> defeated by any code path that forgets the lock. Together: the lock handles
-> the normal case gracefully, the constraint guarantees the invariant holds no
-> matter what any code path does.
+**The constraint cannot be written the obvious way.** A plain
+`UNIQUE (table_id, slot_date, slot_start)` would be wrong: it would also forbid
+a *cancelled*, *expired* or *completed* reservation from ever sharing a slot
+with a new one, so a table could never be rebooked after a cancellation. The
+uniqueness must apply only to **active** reservations.
+
+PostgreSQL would express this with a partial index
+(`CREATE UNIQUE INDEX ... WHERE status IN (...)`). **MySQL has no partial
+index** — and note that the widely-repeated claim that MySQL 8.0.13+ added one
+is wrong: 8.0.13 added *functional* indexes (indexing an expression), which is
+a different feature and cannot filter rows.
+
+The contract's solution (manual §5.3, layer 3) is a **generated column**:
+
+```sql
+ALTER TABLE reservations
+  ADD COLUMN active_slot_key VARCHAR(64)
+    GENERATED ALWAYS AS (
+      CASE WHEN status IN ('HELD','CONFIRMED','SEATED')
+           THEN CONCAT(table_id, '#', slot_id)
+           ELSE NULL END
+    ) STORED,
+  ADD UNIQUE INDEX uq_active_reservation (active_slot_key);
+```
+
+A MySQL unique index permits **multiple NULLs**, so finished reservations
+(`CANCELLED`, `EXPIRED`, `NO_SHOW`, `COMPLETED`) fall out of the constraint
+automatically and the slot becomes bookable again — while at most one active
+reservation can hold `5#12`.
+
+Three constraints on this approach, all verified against the manual's notes:
+
+* The expression may only use **deterministic** functions. `NOW()` or `RAND()`
+  in a generated column is an error, not merely a bad idea.
+* A generated column may reference other columns **of the same table**, which is
+  what makes `table_id`/`slot_id`/`status` usable here.
+* `Duplicate entry ... for key 'uq_active_reservation'` is the **expected,
+  correct** outcome of a losing race — not a bug. Catch it and return 20001.
+  "Fixing" it by weakening the constraint would silently remove the guarantee.
+
+> **Why all three layers?** A unique constraint alone gives correctness but poor
+> UX: every conflict surfaces as an exception. Locking alone gives good UX but is
+> defeated by any code path that forgets the lock — and under READ COMMITTED it
+> does not serialise the insert race at all (§5.1). Together: the lock handles
+> updates to existing rows gracefully, and the constraint guarantees the booking
+> invariant holds no matter what any code path does.
 
 ### 5.4 What the concurrency test must prove
 
@@ -425,11 +499,11 @@ Remaining work, by module owner:
                            │  /api/v1/*  (JSON, JWT)
                     ┌──────▼───────┐
                     │  FastAPI     │  uvicorn, non-root user, port 8000
-                    │  (Docker)    │  /health for the orchestrator
-                    └──────┬───────┘
+                    │  (Docker)    │  /api/v1/health (contract) + /health
+                    └──────┬───────┘   (alias for the container HEALTHCHECK)
                            │  SQLAlchemy pool (size 10 + overflow 20)
                     ┌──────▼───────┐
-                    │  MySQL 8.0   │  InnoDB · utf8mb4 · REPEATABLE READ
+                    │  MySQL 8.0   │  InnoDB · utf8mb4 · READ COMMITTED
                     │  (Docker)    │  named volume for persistence
                     └──────────────┘
 ```
@@ -467,25 +541,42 @@ them in week eight.
 
 ---
 
-## 13. Open questions to resolve before implementation
+## 13. Business rules to settle before implementation
 
-Assign each to an owner in the group chat; they block real coding.
+Status as of 11 Oct 2026, checked against the frozen contracts in
+`JC2001-Group4-协作与统一标准手册.md`. The authoritative decision table — including proposed
+values, owners and deadlines — is `docs/requirements/REQUIREMENTS.md` §6. **Read that table, not
+this list, before coding**: it is where agreed values get written back.
 
-1. **Slot granularity** — 30 min, 60 min, or 90 min? Determines the unique
-   constraint and the whole availability UI. *(Owner: KEYING CHEN + YUANYUAN XUE)*
-2. **How long may a party keep a table?** A 2-hour seating cap affects turnover
-   analytics. *(Owner: KEYING CHEN)*
-3. **Points earning rule** — per yuan spent, or per order? Expiry window?
-   *(Owner: RONG CONG + GEMAN MENG)*
-4. **Coupon stacking** — the proposal says "clearly defined discount-stacking
-   rules". Define them: which combinations are legal, and in what order are
-   discounts applied? Order changes the total. *(Owner: RONG CONG + GEMAN MENG)*
-5. **Bayesian `m`** — what review count counts as "established"? Needs a
-   decision before the ranking can be evaluated. *(Owner: RUNYI PENG)*
-6. **Recommender inputs** — collaborative filtering on order history, content-based
-   on dish categories, or both? "Hybrid" needs a concrete definition to be
-   evaluated with Precision@K and MAE. *(Owner: HUANPAI LI + RUNYI PENG)*
-7. **Moderation policy** — auto-publish then review, or hold until approved?
-   Affects the review module's state machine. *(Owner: RUNYI PENG)*
-8. **No-show definition** — a confirmed reservation not seated within how many
-   minutes? The analytics rate depends on it. *(Owner: HUANPAI LI)*
+### Settled by the frozen manual — do not relitigate
+
+1. **Slot granularity: 30 minutes.** Manual §5.1 (`time_slots` table). Determines the unique
+   constraint and the whole availability UI. *(M2 + M8)*
+2. **Moderation policy: hold until approved.** New reviews enter `PENDING` and appear publicly
+   only after `APPROVED` (manual §4.5, `ReviewStatus`). *(M9)*
+3. **Points ledger is append-only.** Transaction types `EARN / REDEEM / EXPIRE / ADJUST` are
+   frozen; balance is derived, never edited (manual §4.5). The *rate and expiry window* are still
+   open — see item 3 below. *(M4)*
+
+### Still open — each blocks real coding for its module
+
+1. **How long may a party keep a table?** A seating cap affects turnover analytics.
+   Proposed: 120 min soft warning, 180 min hard cap, by 20 Oct. *(KEYING CHEN)*
+2. **Points earning rule and expiry window.** The ledger shape is frozen; the economics are not.
+   Proposed: 1 point per ¥10, expiry 12 months, by 20 Oct. *(RONG CONG + GEMAN MENG)*
+3. **Coupon discount application order.** The `EXCLUSIVE`/`STACKABLE` vocabulary is frozen; the
+   order in which stacked discounts apply is not, and order changes the total.
+   Proposed: percentage first, then fixed amount, capped at order total, by 20 Oct.
+   *(RONG CONG + GEMAN MENG)*
+4. **Bayesian `m`** — what review count counts as "established"? Needed before the ranking can be
+   evaluated. Proposed: `m = 15` with nightly recomputed global mean `C`, by 10 Nov. *(RUNYI PENG)*
+5. **Recommender inputs** — "hybrid" needs a concrete definition to be evaluated with Precision@K
+   and MAE. Proposed: 0.7 item-based collaborative filtering + 0.3 category-content similarity,
+   evaluated on the seeded orders, by 10 Nov. *(HUANPAI LI + RUNYI PENG)*
+6. **No-show definition** — a confirmed reservation not seated within how many minutes? The
+   analytics rate depends on it. Proposed: 20 minutes past slot start, marked by staff, by 20 Oct.
+   *(HUANPAI LI + KEYING CHEN)*
+
+When a value is agreed in the group chat, the owner updates both this section and
+`REQUIREMENTS.md` §6 in the same PR that touches the code, so the document, the contract and the
+implementation never disagree.

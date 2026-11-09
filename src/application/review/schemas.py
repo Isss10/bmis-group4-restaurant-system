@@ -21,3 +21,12 @@ class ReviewResponse(BaseModel):
     rating: int
     content: str | None
     created_at: datetime
+
+
+class DishRankingResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    dish_id: int
+    review_count: int
+    bayesian_score: float
+    global_mean: float
