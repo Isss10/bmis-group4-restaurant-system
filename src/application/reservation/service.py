@@ -20,8 +20,9 @@ class ReservationService:
             reservation_time=reservation_time,
         )
 
-    def cancel_reservation(self, reservation_id: int) -> dict | None:
+    def cancel_reservation(self, reservation_id: int, *, user_id: str | None = None) -> dict | None:
         return self.repository.update_status(
             reservation_id=reservation_id,
             status=ReservationStatus.CANCELLED,
+            user_id=user_id,
         )

@@ -18,7 +18,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import APIRouter, FastAPI, Request, status
+from fastapi import APIRouter, FastAPI, Request, Response, status
 from pydantic import BaseModel
 
 from src.common.config import Settings, get_settings
@@ -164,6 +164,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(_build_health_router())
     app.include_router(_build_auth_router())
 
+    from src.presentation.api.routers.membership import install_membership
+
+    install_membership(app)
+
     # Module routers are imported lazily inside this function so that a syntax
     # error in one module does not prevent the health endpoint from starting —
     # useful when Docker health checks gate the rest of the stack.
@@ -286,7 +290,9 @@ def _build_auth_router() -> APIRouter:
             401: {"description": "Missing (30001) or invalid/expired (30002) token"},
         },
     )
-    async def me(request: Request, identity: CurrentUser) -> Envelope[CurrentIdentity]:
+    async def me(
+        request: Request, identity: CurrentUser, response: Response
+    ) -> Envelope[CurrentIdentity]:
         """Return the caller's id, role and token expiry.
 
         Requires a valid bearer token. Returns 401 with
@@ -294,6 +300,7 @@ def _build_auth_router() -> APIRouter:
         carrying code 30001 or 30002 so the frontend can tell "never logged in"
         from "session lapsed".
         """
+        response.headers["Cache-Control"] = "no-store"
         payload = CurrentIdentity(
             user_id=identity.sub,
             role=identity.role,

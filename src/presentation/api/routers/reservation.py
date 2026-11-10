@@ -1,12 +1,14 @@
 from datetime import datetime
+from typing import Annotated
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 
 from src.application.reservation.service import ReservationService
 from src.common.envelope import success
-from src.common.errors import not_found, validation_failed
+from src.common.errors import not_found, permission_denied, validation_failed
 from src.common.middleware import REQUEST_ID_ATTR
+from src.common.security import Role, TokenPayload, require_roles
 
 # HTTP surface for the reservation module (Objective a). Renamed from
 # `routers/router.py`: the loader looks up `src.presentation.api.routers.<module>`
@@ -17,19 +19,25 @@ from src.common.middleware import REQUEST_ID_ATTR
 # router demonstrated).
 router = APIRouter(tags=["reservation"])
 service = ReservationService()
+Customer = Annotated[TokenPayload, Depends(require_roles(Role.CUSTOMER))]
 
 
 class ReservationCreateSchema(BaseModel):
     table_id: int
-    user_id: str
     reservation_time: datetime
+    # Retain existing clients' field while deriving ownership from the token.
+    user_id: str | None = None
 
 
 @router.post("")
-def create_reservation(payload: ReservationCreateSchema, request: Request) -> dict:
+def create_reservation(
+    payload: ReservationCreateSchema, request: Request, identity: Customer
+) -> dict:
+    if payload.user_id is not None and payload.user_id != identity.sub:
+        raise permission_denied()
     res = service.create_reservation(
         table_id=payload.table_id,
-        user_id=payload.user_id,
+        user_id=identity.sub,
         reservation_time=payload.reservation_time,
     )
     if not res:
@@ -45,8 +53,8 @@ def create_reservation(payload: ReservationCreateSchema, request: Request) -> di
 
 
 @router.post("/{reservation_id}/cancel")
-def cancel_reservation(reservation_id: int, request: Request) -> dict:
-    res = service.cancel_reservation(reservation_id)
+def cancel_reservation(reservation_id: int, request: Request, identity: Customer) -> dict:
+    res = service.cancel_reservation(reservation_id, user_id=identity.sub)
     if not res:
         raise not_found("Reservation not found")
     return success(
