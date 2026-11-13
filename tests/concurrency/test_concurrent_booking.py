@@ -7,6 +7,7 @@ and the database holds exactly ONE reservation row afterwards.
 Skips itself when no real MySQL is configured (APP_DB_HOST).
 Requires the reservation booking endpoint from KEYING CHEN's module.
 """
+
 from __future__ import annotations
 
 import os
@@ -22,8 +23,8 @@ pytestmark = pytest.mark.skipif(
 )
 
 # ---- Tunables -------------------------------------------------------------
-N_WORKERS = 10          # how many customers race for the same slot
-REPEATS = 5             # re-run the whole race R times: a flaky race still fails
+N_WORKERS = 10  # how many customers race for the same slot
+REPEATS = 5  # re-run the whole race R times: a flaky race still fails
 TABLE_ID = 1
 SLOT_DATE = "2026-12-01"
 SLOT_START = "19:00:00"
@@ -55,9 +56,7 @@ def test_exactly_one_booking_wins(run_index: int) -> None:
     lock = threading.Lock()
 
     with ThreadPoolExecutor(max_workers=N_WORKERS) as pool:
-        futures = [
-            pool.submit(_one_booking, i, results, lock) for i in range(N_WORKERS)
-        ]
+        futures = [pool.submit(_one_booking, i, results, lock) for i in range(N_WORKERS)]
         for fut in as_completed(futures):
             fut.result()
 
@@ -66,9 +65,10 @@ def test_exactly_one_booking_wins(run_index: int) -> None:
     conflicts = [s for s in results if s in (400, 409)]
 
     assert len(wins) == 1, f"run {run_index}: expected 1 win, got {len(wins)}"
-    assert len(conflicts) == N_WORKERS - 1, (
-        f"run {run_index}: expected {N_WORKERS - 1} conflicts, got {len(conflicts)}"
-    )
+    actual_conflicts = len(conflicts)
+    expected_conflicts = N_WORKERS - 1
+    message = f"run {run_index}: expected {expected_conflicts} conflicts, got {actual_conflicts}"
+    assert actual_conflicts == expected_conflicts, message
 
     # Prove the invariant on the DATABASE, not just the HTTP responses.
     _assert_one_row_in_db()
@@ -78,6 +78,7 @@ def _assert_one_row_in_db() -> None:
     """Independent session: reservations table must hold exactly 1 row for
     this (table_id, slot_date, slot_start). Filled in once ORM model lands."""
     from sqlalchemy import text
+
     from src.data.database import session_scope
 
     with session_scope() as session:

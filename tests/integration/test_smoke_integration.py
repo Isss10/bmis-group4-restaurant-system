@@ -2,6 +2,7 @@
 
 Skips itself when APP_DB_HOST is unset (unit-only local runs).
 """
+
 from __future__ import annotations
 
 import os
