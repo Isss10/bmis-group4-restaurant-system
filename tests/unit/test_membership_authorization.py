@@ -32,11 +32,18 @@ from src.presentation.api.main import create_app
 
 ORIGIN = "http://localhost:5173"
 WHEN = datetime(2026, 12, 24, 19, 30)
+# (method, path, json body, expected status for a permitted staff role).
+# Updated by the staff module owner: the reservation PATCH now performs a real
+# write and requires {"status": ...} (frozen PENDING/CONFIRMED/CANCELLED
+# vocabulary), and the order PATCH is an honest 404 placeholder until the
+# ordering module ships a backend — no order can exist to update yet. The
+# authorization matrix itself (customer 403, staff roles through, revoked
+# sessions 401) is unchanged; only the request shapes follow the endpoints.
 STAFF_OPERATIONS = [
-    ("GET", "/api/v1/staff/reservations"),
-    ("PATCH", "/api/v1/staff/reservations/1"),
-    ("GET", "/api/v1/staff/orders"),
-    ("PATCH", "/api/v1/staff/orders/1"),
+    ("GET", "/api/v1/staff/reservations", None, 200),
+    ("PATCH", "/api/v1/staff/reservations/1", {"status": "CONFIRMED"}, 200),
+    ("GET", "/api/v1/staff/orders", None, 200),
+    ("PATCH", "/api/v1/staff/orders/1", {"status": "COMPLETED"}, 404),
 ]
 
 
@@ -303,21 +310,45 @@ def test_authorization_does_not_bypass_review_business_rejection(
 def test_staff_endpoints_follow_four_role_matrix_and_logout_revocation(
     authorization: AuthorizationHarness, role: Role
 ) -> None:
+    # The staff reservation PATCH performs a real write now, so it needs a real
+    # row: book one as the customer first, then let the staff role operate on
+    # it. The order endpoints stay honest placeholders until the ordering
+    # module ships a backend — patching any order id is a 404 because no order
+    # can exist yet. The authorization matrix itself (customer 403, staff
+    # roles through, revoked sessions 401) is unchanged by any of this.
+    customer = authorization.login("customer")
+    created = authorization.client.post(
+        "/api/v1/reservations",
+        json=authorization.booking(),
+        headers=authorization.bearer(customer),
+    )
+    assert created.status_code == 200, created.text
+    reservation_id = created.json()["data"]["id"]
+    operations = [
+        ("GET", "/api/v1/staff/reservations", None, 200),
+        ("PATCH", f"/api/v1/staff/reservations/{reservation_id}", {"status": "CONFIRMED"}, 200),
+        ("GET", "/api/v1/staff/orders", None, 200),
+        ("PATCH", "/api/v1/staff/orders/1", {"status": "COMPLETED"}, 404),
+    ]
+
     login = authorization.login(role.value)
     headers = authorization.bearer(login)
-    for method, path in STAFF_OPERATIONS:
-        response = authorization.client.request(method, path, headers=headers)
+    for method, path, body, permitted_status in operations:
+        response = authorization.client.request(method, path, headers=headers, json=body)
         if role == Role.CUSTOMER:
             assert_failure(response, 403, 30003)
         else:
-            assert response.status_code == 200, response.text
-            assert response.json()["code"] == 0
+            assert response.status_code == permitted_status, response.text
+            if permitted_status == 200:
+                assert response.json()["code"] == 0
     logout = authorization.client.post(
         "/api/v1/auth/logout", headers={"Origin": ORIGIN, "X-CSRF-Token": login["csrf_token"]}
     )
     assert logout.status_code == 200, logout.text
-    for method, path in STAFF_OPERATIONS:
-        assert_failure(authorization.client.request(method, path, headers=headers), 401, 30002)
+    for method, path, body, _ in operations:
+        assert_failure(
+            authorization.client.request(method, path, headers=headers, json=body), 401, 30002
+        )
 
 
 @pytest.mark.parametrize("target_role", [Role.CUSTOMER, Role.WAITER])
@@ -342,5 +373,7 @@ def test_admin_disabling_account_invalidates_cross_module_access(
         for path, body in operations:
             assert_failure(authorization.client.post(path, json=body, headers=headers), 401, 30002)
     else:
-        for method, path in STAFF_OPERATIONS:
-            assert_failure(authorization.client.request(method, path, headers=headers), 401, 30002)
+        for method, path, body, _ in STAFF_OPERATIONS:
+            assert_failure(
+                authorization.client.request(method, path, headers=headers, json=body), 401, 30002
+            )
