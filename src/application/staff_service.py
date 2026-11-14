@@ -1,28 +1,28 @@
+"""Application-tier facade for the staff back-office (Objective b).
+
+The staff module never touches another module's tables (ARCHITECTURE.md §7):
+every reservation read and write goes through the reservation module's
+service. This file is where the eventual order-facing methods will live once
+the ordering module ships its backend; until then the order endpoints in
+``src/presentation/api/routers/staff.py`` stay placeholder-only.
+"""
+
+from src.application.reservation.models import ReservationStatus
+from src.application.reservation.service import ReservationService
+
+
 class StaffService:
-    def __init__(self, repository):
-        self.repository = repository
+    """Back-office workflows, composed from other modules' services."""
 
-    def get_reservations(self):
-        """
-        Return reservation list.
-        """
-        # 模拟数据
-        return [{"id": 1, "status": "booked", "table_id": 5}]
+    def __init__(self, reservation_service: ReservationService | None = None) -> None:
+        self._reservations = reservation_service or ReservationService()
 
-    def update_reservation_status(self, reservation_id, status):
-        """
-        Update reservation status.
-        """
-        return {"reservation_id": reservation_id, "status": status, "message": "updated"}
+    def list_reservations(self) -> list[dict]:
+        """All reservations, oldest first — the staff list view (FR-RES-06)."""
+        return self._reservations.list_reservations()
 
-    def get_orders(self):
-        """
-        Return order list.
-        """
-        return [{"id": 101, "items": ["pizza"], "status": "pending"}]
-
-    def update_order_status(self, order_id, status):
-        """
-        Update order status.
-        """
-        return {"order_id": order_id, "status": status, "message": "updated"}
+    def update_reservation_status(
+        self, reservation_id: int, status: ReservationStatus
+    ) -> dict | None:
+        """Move a reservation to ``status``; ``None`` when it does not exist."""
+        return self._reservations.set_reservation_status(reservation_id, status)
