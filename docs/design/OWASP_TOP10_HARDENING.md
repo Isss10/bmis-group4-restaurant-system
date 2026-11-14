@@ -2,7 +2,10 @@
 
 **Scope:** backend `src/` and deployment `deploy/`.
 **Audience:** the group, and whoever assesses Objective (f).
-**Last verified:** 2026-11-06, against `main` at `2876fa2` (PRs #13, #14, #15, #16 merged).
+**Last verified:** 2026-11-14, against `main` at `14df591` (PRs #13–#18 merged).
+The membership-auth PR #10 landed after the previous revision and closes A01 and
+most of A07; this revision re-checks every row against the current tree rather
+than carrying the 2026-11-06 claims forward.
 
 Every row below states **where the control lives** and **how it was verified**.
 Nothing here is aspirational: the ✅ rows were confirmed by running the code or
@@ -14,23 +17,24 @@ reading the exact file, and the ❌ rows are known gaps with an owner and a date
 
 | # | OWASP 2021 category | Status | Primary control |
 |---|---|---|---|
-| A01 | Broken Access Control | ⚠️ Partial | `require_staff()` now guards all four staff routes; **reservation and review routers still declare no auth dependency** |
+| A01 | Broken Access Control | ✅ Done | staff, reservation and review routers all carry an auth dependency; reservation and review derive the actor from the token and reject a body-supplied id that disagrees |
 | A02 | Cryptographic Failures | ✅ Done | bcrypt cost 12; secrets excluded from repr and dumps; HSTS in production |
 | A03 | Injection | ✅ Done | SQLAlchemy ORM throughout; no interpolated SQL in `src/` |
 | A04 | Insecure Design | ✅ Done | Envelope + frozen error contract merged to `main` (#13); docs disabled in production |
 | A05 | Security Misconfiguration | ✅ Done | Production boot refuses weak secrets and wildcard CORS; docs disabled in production |
 | A06 | Vulnerable & Outdated Components | ✅ Done | `pip-audit --strict` and Bandit in CI on every pull request |
-| A07 | Identification & Authentication Failures | ⚠️ Partial | JWT issued and verified; **no rate limiting wired** (and no login endpoint on `main` yet) |
+| A07 | Identification & Authentication Failures | ⚠️ Partial | login endpoints live and rate-limited (`5/minute` on register and login); **review submission still has no limit, which FR-REV-04 requires** |
 | A08 | Software & Data Integrity Failures | ✅ Done | Alembic migrations only; real chain now runs in CI against MySQL 8; auto-discovered migration-completeness guard |
-| A09 | Security Logging & Alerting Failures | ⚠️ Partial | `audit_logs` table + `record_audit()` built and tested, **but no module endpoint calls it yet** |
+| A09 | Security Logging & Alerting Failures | ⚠️ Partial | `record_audit()` is now called by the membership service; **reservation, order-status and review-moderation mutations still write no audit row** |
 | A10 | Server-Side Request Forgery | ➖ Not applicable | No outbound URL fetching anywhere in `src/` |
 
-**Net position:** 6 fully hardened, 3 partial with named gaps (A01, A07, A09), 1 not applicable.
-The three ⚠️ rows are the work that remains; see [Open gaps](#open-gaps).
+**Net position:** 7 fully hardened (A01–A06, A08), 2 partial with named gaps
+(A07, A09), 1 not applicable (A10). The two ⚠️ rows are the work that remains;
+see [Open gaps](#open-gaps).
 
 ---
 
-## A01 — Broken Access Control ⚠️
+## A01 — Broken Access Control ✅
 
 **What exists**
 
@@ -41,32 +45,31 @@ The three ⚠️ rows are the work that remains; see [Open gaps](#open-gaps).
   role, otherwise it permits nobody"`) — an empty allow-list can never silently
   mean "everyone".
 
-**The gap**
+**Status — every writing router is now guarded**
 
-Status changed materially with PR #13 (merged). Verified against `main` at
-`2876fa2` by reading each router and by the generated OpenAPI document:
+Re-verified against `main` at `14df591` by reading each router and by the
+committed OpenAPI document:
 
 | Router | Mounted at | Auth dependency | Verdict |
 |---|---|---|---|
 | `routers/staff.py` | `/api/v1/staff/*` (4 routes) | `Depends(require_staff())` on all four | ✅ guarded |
-| `routers/reservation.py` | `/api/v1/reservations`, `/{id}/cancel` | **none** | 🔴 open |
-| `routers/review.py` | `/api/v1/reviews/` | **none** | 🔴 open |
+| `routers/reservation.py` | `/api/v1/reservations`, `/{id}/cancel` | `Depends(require_roles(Role.CUSTOMER))` | ✅ guarded |
+| `routers/review.py` | `/api/v1/reviews/` | `Depends(require_roles(Role.CUSTOMER))` | ✅ guarded |
 
-So the picture inverted. The staff routes — the ones this document previously
-flagged as the exposure — are now mounted *and* guarded: their OpenAPI entries
-carry a `security: [{HTTPBearer: []}]` block, and the old `require_staff_roles()`
-stub that returned a hardcoded dict has been replaced with the real
-`require_staff()` gate (waiter/manager/admin).
+The two customer routers were the gap in the previous revision; PR #10 closed it.
+Both now derive the actor from the token, not from the request body: the
+reservation handler rejects a payload whose `user_id` disagrees with the token's
+`sub` (`permission_denied()`), and the review handler rejects a `customer_id`
+that disagrees with the token's `sub`. The old "caller can post a review as
+anyone" exposure is gone — the body field is now validated *against* the
+authenticated identity rather than trusted.
 
-The remaining gap is the other two. **`POST /api/v1/reservations` books a table
-and `POST /api/v1/reviews/` writes a review, both with no authentication at all**
-— any unauthenticated caller can create rows. Per the frozen role matrix (manual
-§4.4) both are customer actions, so they need `Depends(get_current_token)` at
-minimum, plus the ownership check that FR-REV-01 requires (a customer may only
-review a dish they actually ordered, which needs the caller's identity to
-enforce server-side — right now nothing reads it). The review router currently
-takes `customer_id` from the request body, which means a caller can post a review
-as anyone.
+**What is intentionally public** (confirmed via the committed `openapi.json`, the
+paths carrying no `security` block): `/`, `/api/v1/health`, the five
+`/api/v1/auth/*` endpoints (register, login, logout, refresh, csrf — these are
+the entry points, they cannot require a token), and
+`/api/v1/reviews/dishes/ranking` (a public read-only leaderboard). Every path
+that *writes* business data now carries an auth dependency.
 
 **Rule for every module owner:** a route that reads or writes business data must
 declare an auth dependency. Back-office routes use `dependencies=[Depends(require_staff)]`
@@ -74,8 +77,9 @@ or a narrower gate; customer routes use `Depends(get_current_token)` and derive
 the actor from the token, **never** from a client-supplied id field.
 
 **How to verify yours:** open `http://localhost:8000/openapi.json` after merging
-and confirm every path carries a `security` block. An authenticated API whose
-OpenAPI document has no `security` entries is the classic sign of a missing gate.
+and confirm every path that mutates data carries a `security` block. An
+authenticated API whose OpenAPI document has no `security` entries is the classic
+sign of a missing gate.
 
 ---
 
@@ -104,11 +108,15 @@ OpenAPI document has no `security` entries is the classic sign of a missing gate
 - `src/common/audit.py` stores caller-supplied JSON via a `JSON` column, not via
   string concatenation.
 
-**Remaining surface:** the frontend. What is on `main` today is a single static
-prototype page, `src/presentation/web/index.html` (menu data hardcoded, no API
-calls). PR #12 is building the real Vue 3 SPA under `frontend/`; when it lands,
-avoid `v-html` with user-supplied content — that reintroduces stored XSS
-regardless of how clean the backend is.
+**Remaining surface:** the frontend. PR #12 (merged) added the real Vue 3 + Vite
++ TypeScript SPA under `frontend/`, and PR #18 added the customer ordering UI
+(category filter, cart, order submission); PR #10 added a membership client under
+`src/presentation/membership/`. The static prototype at
+`src/presentation/web/index.html` is now superseded. The XSS rule still applies to
+all three clients: avoid `v-html` with user-supplied content — that reintroduces
+stored XSS regardless of how clean the backend is. The committed clients were not
+audited line-by-line in this revision; a `v-html` sweep over `frontend/` and
+`src/presentation/membership/` is outstanding (owner: M5).
 
 ---
 
@@ -212,9 +220,12 @@ schema always matches the deployed code.
   files for hardcoded credentials, so a leaked key fails the build rather than
   sitting in history unnoticed.
 
-Verified locally on 2026-11-06 against `main` at `2876fa2`: `ruff check`,
-`ruff format --check`, `black --check` (35 files unchanged), `mypy src`
-(35 source files, no issues) and the 235-test unit suite all pass.
+Verified by CI on every pull request against `main`; the green run at `14df591`
+covers `ruff check`, `ruff format --check`, `mypy src`, Bandit at medium and
+above, and `pip-audit --strict`. The unit suite collects 318 tests at this
+baseline (up from 235 at the previous revision, as the membership module's tests
+landed). Local re-runs from the maintainer's `.venv-diag` have matched CI on every
+run so far.
 
 > The project `.venv` on the maintainer's machine is blocked by the OS
 > application-control policy, so local verification runs from a rebuilt
@@ -233,36 +244,40 @@ Verified locally on 2026-11-06 against `main` at `2876fa2`: `ruff check`,
   bypass.
 - `require_roles()` enforces a minimum role per route (see A01).
 - Failed logins are auditable via `ACTION_LOGIN_FAILURE`.
+- **Login endpoints are live.** PR #10 added `/api/v1/auth/register`, `/login`,
+  `/refresh`, `/logout` and `/csrf` in `routers/membership.py`, mounted through
+  `install_membership(app)`.
+- **Rate limiting is wired.** `routers/membership.py` builds a `slowapi`
+  `Limiter(key_func=get_remote_address)` and `install_membership` attaches it
+  (`app.state.limiter = limiter`), registers the `RateLimitExceeded` handler, and
+  honours the `rate_limit_enabled` setting. `@limiter.limit("5/minute")` guards
+  both `register` and `login`, so the credential-stuffing surface is throttled.
 
-**The gap — rate limiting is configured but not wired**
+**The gap — review submission is still not rate-limited**
 
-`config.py` defines the limits:
+`config.py` defines the limits and the `Limiter` is attached to the app, but the
+limit decorators are only on the two membership auth routes. **`POST
+/api/v1/reviews/` carries no limit.** FR-REV-04 requires review submission to be
+rate-limited (default 5/minute per user) with limit hits recorded, and the
+`rate_limit_review = "5/minute"` setting already exists for exactly this — it is
+configured but not applied to the review router.
 
 ```python
+# config.py — the limits that exist
 rate_limit_default: str = "200/minute"
 rate_limit_review:  str = "5/minute"
 rate_limit_enabled: bool = True
 ```
 
-and `requirements.txt` pins `slowapi>=0.1.9,<0.2`, which **is installed**. But
-`git grep -E "slowapi|Limiter"` over `src/` returns nothing: **no limiter is
-attached to the application**, so no endpoint is actually limited.
-
-This is now unblocked. It previously had to wait for `feature/contract-alignment`
-to avoid a guaranteed conflict in `main.py`; that branch merged as PR #13, so the
-limiter can be wired directly against `main`.
-
-**Note on severity:** there is no login endpoint on `main` yet (only
-`GET /api/v1/auth/me`, which verifies an existing token). PR #10 adds
-authentication, so the credential-stuffing exposure is *not yet live* — but the
-limiter must land with or before #10, not after it.
+The fix is local: the review router needs `@limiter.limit("5/minute")` on its
+submission handler (the limiter instance is already on `app.state`). Until then a
+single caller can flood `POST /api/v1/reviews/`, which is both a spam vector and
+a way to distort a dish's ranking — the very thing FR-REV-04 exists to stop.
 
 **Why the limits are per-route rather than global:** a blanket `200/minute`
 throttles an attacker no more than a legitimate customer. Login needs something
 far tighter (a few attempts per minute per IP), and review submission needs the
-`5/minute` limit that Objective (c) already specifies. Note that
-`POST /api/v1/reviews/` **is** live on `main` today and is therefore the one
-existing endpoint that already needs its limit applied (FR-REV-04).
+`5/minute` limit that Objective (c) specifies.
 
 ---
 
@@ -291,16 +306,21 @@ existing endpoint that already needs its limit applied (FR-REV-04).
   comment — no job ever executed one, which is why the two defects below reached
   `main` with a green pipeline. A non-blocking `alembic check` drift step sits
   alongside it; promote it to blocking once a run shows a clean baseline.
-- The committed `docs/api/openapi.json` currently matches the generated document
-  **line for line** — re-verified on 2026-11-06 against `main` at `2876fa2` by
-  running `python scripts/export_openapi.py` and diffing (653 lines both sides,
-  zero differing lines, identical path and schema sets). One caveat worth knowing:
-  the committed blob is LF while a regeneration on Windows writes CRLF, so a raw
-  hash comparison differs by line endings only. Regenerate on Linux/CI, or
-  normalise before hashing, if you want a byte-level check. There is **no CI
-  check** for this, so the two can drift the moment someone adds a route without
-  re-exporting. Re-export with `python scripts/export_openapi.py` after any route
-  change, and consider adding a diff check to the `hygiene` job.
+- The committed `docs/api/openapi.json` was last re-verified against the running
+  app on 2026-11-06 at `2876fa2`. **It is now stale and must be re-exported
+  before this claim is trusted again:** PRs #10 and #18 added the auth and
+  membership routes after that check, so the committed document and the running
+  app have diverged. As of 2026-11-14 the committed file lists 20 paths including
+  the `/api/v1/auth/*` and membership endpoints, but it has not been diffed
+  against a fresh export at `14df591`, and `/api/v1/orders` and
+  `/api/v1/analytics` are absent because those routers are not mounted (gap 4).
+  Re-export with `python scripts/export_openapi.py` and re-diff. One caveat worth
+  knowing: the committed blob is LF while a regeneration on Windows writes CRLF,
+  so a raw hash comparison differs by line endings only — regenerate on Linux/CI,
+  or normalise before hashing. There is **no CI check** for this, so the two drift
+  the moment someone adds a route without re-exporting; consider adding a diff
+  check to the `hygiene` job (FR-XX-04 requires the re-export after every route
+  change).
 - The `hygiene` job blocks committed secrets and `.env` files, and scans tracked
   files for hardcoded credentials.
 - The `hygiene` job validates pull-request titles and commit messages against
@@ -354,31 +374,46 @@ status last Tuesday?" needs rows that survive restarts.
 - Read-only operations are deliberately **not** audited; that would bury the
   signal in noise.
 
-**The gap — the trail records nothing, because nothing calls it**
+**The gap — only the membership module writes audit rows so far**
 
-Verified on 2026-11-06: `git grep -n "record_audit" origin/main -- src` returns
-**only the definition, its docstring, and two comments explaining a past bug**.
-There is not a single call site. No route, service or repository writes an audit
-row, so in a deployed system the `audit_logs` table stays permanently empty.
+Re-verified on 2026-11-14 against `main` at `14df591`: `git grep -n
+"record_audit(" -- src` now finds **two call sites, both in
+`src/application/membership/service.py`** (admin bootstrap and the `_audit`
+helper used on role/status changes). The previous revision's "not a single call
+site" is no longer true — PR #10 wired the membership module, so user and role
+mutations are audited.
 
-FR-XX-03 in `docs/requirements/REQUIREMENTS.md` requires back-office state
-changes (reservation status, order status, review moderation, points, coupons,
-roles) to be audit-logged with before/after snapshots, and names the owner as
-**M1 + module owners**. The infrastructure is finished and unit-tested
-(30 tests in `tests/unit/test_audit.py`, 97.4% coverage of `audit.py`); what is
-missing is the wiring at each mutation point.
+The gap has narrowed but not closed. FR-XX-03 requires *back-office state
+changes* — reservation status, order status, review moderation, points, coupons —
+to be audit-logged with before/after snapshots, and names the owner as **M1 +
+module owners**. Of those, none is wired yet:
 
-Two of the four staff mutations are on `main` now and are the natural first
-targets: `PATCH /api/v1/staff/reservations/{id}` and `PATCH /api/v1/staff/orders/{id}`.
-Their handlers still return placeholder data, so wiring audit there should happen
-together with connecting them to the real services — otherwise we would be
-auditing a mutation that does not mutate anything.
+| Mutation | Audit action constant exists? | Wired? |
+|---|---|---|
+| user / role change | `ACTION_USER_ROLE_CHANGED` | ✅ membership service |
+| reservation status change | `ACTION_RESERVATION_STATUS_CHANGED` | ❌ not called |
+| order status change | `ACTION_ORDER_STATUS_CHANGED` | ❌ not called |
+| review moderation | `ACTION_REVIEW_MODERATED` | ❌ not called |
+| points adjustment | `ACTION_POINTS_ADJUSTED` | ❌ not called |
+| coupon issue / redemption | `ACTION_COUPON_ISSUED` / `_REDEEMED` | ❌ not called |
 
-**Verified end-to-end on 2026-10-25 (infrastructure only):** `alembic upgrade head`
+The action constants are all defined in `audit.py`; what is missing is the call
+at each mutation point. The infrastructure is finished and unit-tested (30 tests
+in `tests/unit/test_audit.py`, 97.4% coverage of `audit.py`).
+
+The two staff mutations are the natural next targets: `PATCH
+/api/v1/staff/reservations/{id}` and `PATCH /api/v1/staff/orders/{id}`. Their
+handlers still return placeholder data (see A09 note below and chapter 7 of the
+report), so wiring audit there should happen together with connecting them to the
+real services — otherwise we would be auditing a mutation that does not mutate
+anything.
+
+**Verified end-to-end on 2026-10-25 (infrastructure):** `alembic upgrade head`
 creates the table with all 14 columns and all 9 indexes; `record_audit()` writes
 and reads back correctly; redaction confirmed; `downgrade` to base removes the
 table cleanly and re-`upgrade` reproduces it identically. This proves the
-mechanism works — it does not prove anything is being recorded.
+mechanism works. The membership call sites now also prove it is reachable from a
+real service; the remaining mutations do not yet exercise it.
 
 ---
 
@@ -404,27 +439,28 @@ Four items, each with an owner and a date. Ordered by how much they block.
 
 | # | Gap | Blocks | Owner | Target |
 |---|---|---|---|---|
-| 1 | **Reservation and review routers have no auth dependency.** `POST /api/v1/reservations` and `POST /api/v1/reviews/` are live on `main` and accept writes from any unauthenticated caller. Review also takes `customer_id` from the request body, so a caller can post as anyone. | A01, FR-REV-01 | **Member2** (reservation), **Member9** (review) | before next module merge |
-| 2 | **Audit logging not wired.** `record_audit()` is built and tested but has zero call sites; `audit_logs` stays empty in a deployed system. The two staff mutation endpoints are the first targets, but should be wired together with connecting them to real services. | A09, FR-XX-03 | **Member1** + module owners | with each module's service wiring |
-| 3 | **Rate limiting not wired.** `slowapi` is installed and limits are configured, but no `Limiter` is attached to the app. No longer blocked (the contract branch it had to wait for is merged). Must land with or before PR #10's login endpoint; `POST /api/v1/reviews/` is already live and already needs its `5/minute` limit. | A07, FR-REV-04 | **Member1** | before PR #10 merges |
-| 4 | **No integration or concurrency tests.** `tests/integration/` and `tests/concurrency/` contain only `.gitkeep`. The concurrency test that proves only one of many simultaneous bookings succeeds is the core Objective (d) deliverable and the headline demo/report evidence. | Objective (d), NFR-01 | **Member4 + Member7** | 30 Nov |
+| 1 | **Review submission is not rate-limited.** The `Limiter` is attached to the app and guards register/login, but `POST /api/v1/reviews/` has no `@limiter.limit`, despite `rate_limit_review = "5/minute"` already being configured. A caller can flood reviews and distort a dish's ranking. | A07, FR-REV-04 | **Member9** | with the review module's next pass |
+| 2 | **Audit logging wired only in membership.** `record_audit()` is called by the membership service but by no other module. Reservation status, order status, review moderation, points and coupon mutations write no audit row, so FR-XX-03 is unmet for every back-office change outside membership. The two staff mutation endpoints are the next targets, but should be wired together with connecting them to real services. | A09, FR-XX-03 | **M1** + module owners | with each module's service wiring |
+| 3 | **The concurrency test has never executed.** `tests/concurrency/test_concurrent_booking.py` (merged in PR #11) declares no `pytest` marker, so the CI job's `-m "integration or concurrency"` selection deselects it; it is never collected. It would also fail if collected — it POSTs to a non-existent `/reservations/book` route with the wrong payload and no token, and asserts on transport status rather than the envelope code. Underneath it, the reservation service has no conflict detection and the table has no `version` column or unique constraint, so a concurrent second booking cannot fail yet. This is the core Objective (d) deliverable and the headline demo/report evidence. | Objective (d), NFR-01 | **M8 + M2** (schema/service), **M7** (test) | 30 Nov |
+| 4 | **Two contracted routers are declared but not mounted.** `routers/ordering.py` and `routers/analytics.py` do not exist, so `/api/v1/orders` and `/api/v1/analytics` are in the registry but never mounted — the tolerant loader skips them at debug level. Not an OWASP gap, but it means the OpenAPI surface and the running app disagree, which undermines the A01/A08 verification method (an endpoint can be documented and absent). | FR-ORD, FR-ANA, A08 | **M5/M2** (ordering), **M6** (analytics) | 30 Nov |
 
 **Closed since the last revision:**
 
-- **Contract branch merged (was gap 1).** `feature/contract-alignment` landed as
-  PR #13. The envelope, error contract and new router loader are on `main`; A04
-  moved from ⚠️ to ✅.
-- **Staff routes authenticated (was gap 3).** PR #4's four staff routes are now
-  mounted *and* guarded by `require_staff()`; the `require_staff_roles()` stub
-  that returned a hardcoded dict is gone. The exposure has moved to the two
-  customer routers instead (now gap 1 above).
-- **Coverage floor raised (was a smaller item).** `pyproject.toml` sets
-  `fail_under = 80` (was 0 — a floor that cannot fail). The unit suite measures
-  **85.4%** on `main` at `2876fa2`, clearing it. The `test-integration` job passes
-  `--cov-fail-under=0` explicitly, because with a global floor an empty
-  `tests/integration/` would exit 1 (0% coverage) instead of 5 (no tests
-  collected) and fail every pull request. Treat 80 as a ratchet: raise it as the
-  suite comfortably clears higher numbers, never lower it.
+- **Reservation and review routers authenticated (was gap 1).** PR #10 added
+  `Depends(require_roles(Role.CUSTOMER))` to both, and each now validates a
+  body-supplied id against the token's `sub`. A01 moved from ⚠️ to ✅.
+- **Rate limiting wired for auth (part of was gap 3).** PR #10 attached the
+  `slowapi` `Limiter` to the app and limited register/login to `5/minute`. The
+  remaining piece — review submission — is now gap 1 above.
+- **Contract branch merged (earlier revision).** `feature/contract-alignment`
+  landed as PR #13; A04 moved from ⚠️ to ✅.
+- **Staff routes authenticated (earlier revision).** PR #4's four staff routes are
+  mounted and guarded by `require_staff()`.
+- **Coverage floor raised.** `pyproject.toml` sets `fail_under = 80`; the unit
+  suite cleared it at the previous baseline. Treat 80 as a ratchet: raise it as
+  the suite comfortably clears higher numbers, never lower it. The
+  `test-integration` job passes `--cov-fail-under=0` explicitly so an empty
+  integration directory exits 5 (no tests collected) rather than 1.
 
 ---
 
@@ -438,21 +474,29 @@ git grep -nE "execute\((f\"|f')" -- src
 
 # A07 - rate limiting wired?
 git grep -nE "slowapi|Limiter" -- src
+# Expected at 14df591: hits in src/presentation/api/routers/membership.py (the
+# Limiter build and the two @limiter.limit decorators on register/login). The
+# review router has NO hit yet — that is gap 1.
 
-# A01 - which routers carry an auth dependency? (gap 1)
+# A01 - which routers carry an auth dependency?
 git grep -nE "require_staff|require_roles|get_current_token" -- src/presentation/api/routers
-# cross-check against the mounted table: every path must have a security block
+# cross-check against the mounted table: every path that writes must have a security block
 python -c "import json; d=json.load(open('docs/api/openapi.json')); \
 print([p for p,v in d['paths'].items() for m in v.values() if 'security' not in m] or 'all guarded')"
-# Expected output while gap 1 is open:
-#   ['/', '/api/v1/health', '/api/v1/reservations',
-#    '/api/v1/reservations/{reservation_id}/cancel', '/api/v1/reviews/']
-# '/' and '/api/v1/health' are intentionally public (service index, liveness
-# probe). The other three are the gap: they write business data unauthenticated.
+# Expected output at 14df591 (all intentionally public — no write endpoint is bare):
+#   ['/', '/api/v1/auth/csrf', '/api/v1/auth/login', '/api/v1/auth/logout',
+#    '/api/v1/auth/refresh', '/api/v1/auth/register', '/api/v1/health',
+#    '/api/v1/reviews/dishes/ranking']
+# '/' and '/health' are the service index and liveness probe; the auth endpoints
+# are the entry points (they cannot require a token); dishes/ranking is a public
+# read-only leaderboard. If a WRITE path (reservations, reviews/, staff, orders,
+# membership) ever appears in this list, it is a regression — re-add its gate.
 
-# A09 - does anything actually write an audit row? (gap 2)
-# Expect ONLY the definition in src/common/audit.py plus comments, until wiring lands
-git grep -n "record_audit" -- src
+# A09 - does anything actually write an audit row?
+git grep -n "record_audit(" -- src
+# Expected at 14df591: two real call sites in
+# src/application/membership/service.py (plus the definition in common/audit.py
+# and doc/comment mentions). Every other mutation point is still unwired — gap 2.
 
 # A08/A09 - migration chain is complete and reversible
 pytest tests/unit/test_migration_completeness.py -v
@@ -463,8 +507,10 @@ black --check src tests
 bandit -r src -c pyproject.toml --severity-level medium
 pytest tests/unit -m "not integration and not concurrency and not slow" --cov=src
 
-# A08 - the archived API document matches the running app (diff should be empty;
-# regenerate on Linux/CI, a Windows regeneration differs by line endings only)
+# A08 - the archived API document vs the running app. NOTE: as of 14df591 the
+# committed openapi.json is STALE (PRs #10 and #18 added routes after the last
+# export). This diff is expected to be non-empty until someone re-exports.
+# Regenerate on Linux/CI; a Windows regeneration differs by line endings only.
 python scripts/export_openapi.py --output /tmp/openapi-check.json
 diff /tmp/openapi-check.json docs/api/openapi.json
 
