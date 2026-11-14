@@ -1,4 +1,4 @@
-﻿from typing import Annotated
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -32,9 +32,7 @@ def moderate_review(
     db: Annotated[Session, Depends(get_db)],
     staff_id: Annotated[int, Depends(get_current_staff_id)],
 ) -> ReviewModeration:
-    moderation = update_moderation_status(
-        db, review_id, payload.status, staff_id, payload.reason
-    )
+    moderation = update_moderation_status(db, review_id, payload.status, staff_id, payload.reason)
     if not moderation:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Review not found")
     return moderation
