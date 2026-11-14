@@ -28,3 +28,18 @@ def test_submit_review_creates_pending_moderation(db_session: Session) -> None:
     assert stats is not None
     assert stats.review_count == 1
     assert stats.bayesian_score > 0
+
+
+def test_moderation_update(db_session: Session) -> None:
+    from src.application.review.service import get_pending_moderations, update_moderation_status
+
+    payload = ReviewCreate(customer_id=2, dish_id=102, order_id=5002, rating=4)
+    review = submit_review(db_session, payload)
+
+    pending = get_pending_moderations(db_session)
+    assert len(pending) > 0
+
+    updated = update_moderation_status(db_session, review.id, "approved", staff_id=99)
+    assert updated is not None
+    assert updated.status == "approved"
+    assert updated.moderated_by == 99
