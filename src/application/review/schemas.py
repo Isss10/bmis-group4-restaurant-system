@@ -30,3 +30,18 @@ class DishRankingResponse(BaseModel):
     review_count: int
     bayesian_score: float
     global_mean: float
+
+
+class ModerationUpdateRequest(BaseModel):
+    status: str = Field(pattern="^(approved|hidden)$")
+    reason: str | None = None
+
+
+class ModerationListResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    review_id: int
+    status: str
+    moderated_by: int | None
+    created_at: datetime
