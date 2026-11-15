@@ -55,13 +55,23 @@ entries.** Each still needs: full bibliographic details retrieved from the publi
 formatting in the chosen style, and a check that the source actually says what the citing
 sentence claims. Do not cite from this list without opening the source.
 
-Cited in the current ch.1 draft as [1]–[3]:
+### Verified entries for ch.1 (checked against source text on 16 Nov 2026)
 
-| Ref | Candidate source | Supports | Caution |
-|---|---|---|---|
-| [1] | *AI Agent for Automated Restaurant Table Reservations Using n8n*, IEEE Xplore, 2026, doc. 11559338 | ch.1 §1.1 — phone/manual registers are error-prone at peak hours and produce double bookings | IEEE abstract page; confirm the claim is in the abstract or full text, not inferred from the title |
-| [2] | *Project Management in Prototyping an Online Table Reservation System*, International Journal of Information Systems and Engineering (e-journal.uac.ac.id), 2026, article 9314 | ch.1 §1.1 — most restaurants still rely on manual reservation, leading to miscommunication and double bookings | Lower-tier venue; acceptable as supporting evidence alongside [1], not as the sole source |
-| [3] | *A Web-Based Innovative Approach of the Booking System for the Food Industry*, IEEE Xplore, 2025, doc. 11273655 | ch.1 §1.1 — digitising reservations reduced manual errors such as double bookings | As [1] |
+All three were opened and the exact supporting sentence read; full bibliographic
+details are taken from the publisher pages. **IEEE-style** is shown; convert if the
+group settles on Harvard. Numbering is provisional and will be renumbered globally
+at merge time.
+
+| Ref | Full citation (IEEE style) | Exact supporting text read |
+|---|---|---|
+| [1] | P. N. Munavalli and G. P. Reddy, "AI agent for automated restaurant table reservations using n8n," in *Proc. 2026 4th Int. Conf. Self Sustainable Artificial Intelligence Systems (ICSSAS)*, Erode, India, May 2026, doi: 10.1109/ICSSAS68835.2026.11559338. | Introduction: "Traditionally, table bookings are handled by phone calls and manual registers, or basic online reservation tools… Such approaches are highly error-prone during peak hours and often result in double bookings or inefficient table allocation." |
+| [2] | A. Felix, V. Leornardo, M. Melcelyn, and D. Ananda, "Project management in prototyping an online table reservation system," *Indonesian Interdisciplinary Journal of Sharia Economics (IIJSE)*, vol. 9, no. 2, pp. 13325–13347, Jun. 2026, doi: 10.31538/iijse.v9i2.9314. | Abstract: "most restaurants continue to rely on manual reservation processes prone to miscommunication, double bookings, and operational inefficiency." |
+| [3] | N.-D. Gheorghe, B. Alexandrescu, and R.-C. Constantinescu, "A web-based innovative approach of the booking system for the food industry," in *Proc. 2025 10th Int. Conf. Energy Efficiency and Agricultural Engineering (EE&AE)*, Stara Zagora, Bulgaria, Nov. 2025, doi: 10.1109/EEAE65901.2025.11273655. | Introduction: "online reservation systems have emerged as essential tools for optimizing service workflows, reducing manual errors, and streamlining resource management." |
+
+> ⚠️ **Precision note on [3].** The source supports "reducing manual errors and
+> streamlining resource management" — it does **not** itself mention double
+> bookings or miscommunication (those are [1] and [2]). ch.1 §1.1 was worded on
+> 16 Nov to match exactly what [3] says. Do not re-broaden the claim.
 
 For ch.9 §9.3 (Bayesian average) — **the formula must be attributed**:
 

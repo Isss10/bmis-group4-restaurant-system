@@ -24,8 +24,8 @@ failure [1], [2]. **Reservation records are lost** because the register is a sin
 physical artefact with no backup and no history. **Order-entry errors** arise because a
 dish is transcribed at least twice — once by the waiter, once by whoever totals the bill —
 and neither transcription is validated against the menu. Digitising the reservation process
-has been reported to reduce exactly these manual errors, including double bookings and
-miscommunication [3].
+has been reported to reduce manual errors and streamline resource management more
+generally [3].
 
 The same manual workflow also deprives the restaurant of data. A register records what
 happened but cannot be queried: the manager cannot ask which hours are busiest, which
@@ -99,14 +99,63 @@ Roles are carried as a claim in a JSON Web Token and enforced server-side on eve
 The role-to-endpoint matrix is fixed in the group's internal contract and reproduced in
 chapter 2 where a requirement depends on it.
 
+**Figure 1.1** gives the system context: who interacts with the system, across what boundary,
+and what sits outside it. Chapter 4 develops this into the full context and architectural
+models.
+
+```mermaid
+flowchart LR
+    subgraph Actors
+        C([Customer])
+        W([Waiter])
+        M([Manager])
+        A([Admin])
+        JOB([Hold-expiry job])
+    end
+
+    subgraph System["Restaurant Reservation and Food-Ordering System"]
+        API[["REST API over HTTP/JSON, JWT bearer token"]]
+        DB[("MySQL 8.0 — InnoDB, utf8mb4, READ COMMITTED")]
+        API --- DB
+    end
+
+    C -->|book, order, review, earn points| API
+    W -->|manage reservations and orders, moderate reviews| API
+    M -->|all waiter actions, plus dashboard and configuration| API
+    A -->|all manager actions, plus user and role management| API
+    JOB -.->|release expired seat holds every 60 s| API
+
+    X1[/Online payment/]:::out
+    X2[/SMS notification/]:::out
+    X3[/Commercial cloud services/]:::out
+    System -.->|explicitly out of scope| X1
+    System -.->|explicitly out of scope| X2
+    System -.->|explicitly out of scope| X3
+
+    classDef out stroke-dasharray: 5 5
+```
+
+*Figure 1.1 — System context. Solid arrows are actor interactions across the HTTP boundary;
+the dashed arrow is the system actor. The three dashed boxes on the right are permanently out
+of scope by decision (§1.2), revisited as future work in chapter 13.*
+
+
 ## 1.4 Approach
 
 The prototype is built as a three-tier application — presentation, application, data — over
 a MySQL 8.0 InnoDB database, with a FastAPI backend exposing a documented REST API and Vue 3
-single-page clients for the customer, staff and manager surfaces. Chapter 4 sets out the
-architecture and the reasoning behind it; the short version is that a three-tier split gives
-the concurrency guarantee exactly one home, allows ten people to work in parallel without
-stepping on each other, and makes the HTTP boundary a natural seam for testing.
+single-page clients built with Vite and TypeScript. Chapter 4 sets out the architecture and
+the reasoning behind it; the short version is that a three-tier split gives the concurrency
+guarantee exactly one home, allows ten people to work in parallel without stepping on each
+other, and makes the HTTP boundary a natural seam for testing.
+
+The proposal's five modules map onto these client surfaces unevenly, and this report
+describes what actually ships rather than what was planned: a customer-facing app (menu
+browsing, cart and order submission) under `frontend/`, and a separate membership
+authentication app under `src/presentation/membership/`. A manager dashboard component
+(`AnalyticsDashboard.vue`) and the staff back-office exist as code but are, as of this
+writing, only partially surfaced to the user; chapter 11 records these gaps explicitly and
+chapter 12 evaluates the system against each objective on that honest basis.
 
 The booking guarantee rests on three independent layers rather than one: a database
 transaction, an optimistic-locking version check, and a unique constraint as a final safety
@@ -168,9 +217,9 @@ this draft and will be renumbered globally at merge time.
       considerably, but the one M1 found (2.33 %, Resos No-Show Index 2026) is
       **single-source and vendor-published** — see the caution in `references.md` before
       using it. The academic alternatives listed there are better.
-- [ ] **Add a system context diagram** as Figure 1.1 (restaurant staff, customers, the
-      database, the expiry job). Chapter 4 has the full context model; a simplified version
-      belongs here so the reader has an orientation before the requirements chapter.
+- [x] **Add a system context diagram** — added as Figure 1.1 in §1.3 (actors, the HTTP/JSON
+      boundary, MySQL, the hold-expiry job, and the three out-of-scope integrations). Chapter 4
+      develops it into the full context and architectural models.
 - [x] **Objective lettering — settled 15 Nov against the submitted proposal PDF.** The
       submitted proposal numbers its objectives **(a)–(g)**, and `REQUIREMENTS.md` §7 uses
       the same lettering, so there is no discrepancy to reconcile. Mapping, for every chapter
@@ -181,8 +230,11 @@ this draft and will be renumbered globally at merge time.
       ⚠️ An earlier draft that circulated in the group working folder used (a)–(i) and put
       the user manual under (d). **That draft is not the submitted one — do not cite it.**
       Chapters 11 and 12 were corrected on 15 Nov for exactly this reason.
-- [ ] §1.4 claims a Vue 3 client for all three surfaces. The customer app and the staff app
-      exist; **verify the manager dashboard client is actually delivered before the merge**,
-      or reword to match what ships. Do not let the report promise a component the PoC lacks.
+- [x] **§1.4 client surfaces — corrected to match what ships (16 Nov).** Verified against
+      `main`: there are two separate Vue projects (`frontend/` customer app,
+      `src/presentation/membership/` auth app). `AnalyticsDashboard.vue` exists but is **not
+      imported or mounted** by `App.vue`, and the staff back-office is only partly surfaced, so
+      §1.4 no longer claims three working clients. ch.11 records the gaps; ch.12 evaluates
+      against them honestly.
 - [ ] Get every member to read §1.2's module table once. It is the single paragraph that
       tells the examiner what the group built; a wrong description here is expensive.
