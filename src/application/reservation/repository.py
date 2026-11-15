@@ -27,6 +27,33 @@ class ReservationRepository:
                 "status": res_status,
             }
 
+    def list_reservations(self) -> list[dict]:
+        """Return every reservation, oldest ``reservation_time`` first.
+
+        Added by the staff module owner (Objective b) for the back-office list
+        view: ARCHITECTURE.md §7 forbids the staff module from reading the
+        ``reservations`` table directly, so the read has to live here, behind
+        the reservation module's own boundary. Strictly additive — no existing
+        behaviour changes; reservation-module owner please eyeball this in
+        review.
+
+        Values are copied into plain dicts *inside* the session scope so the
+        caller never touches a detached ORM instance (same discipline as
+        ``create`` above).
+        """
+        with session_scope() as session:
+            rows = session.query(Reservation).order_by(Reservation.reservation_time).all()
+            return [
+                {
+                    "id": row.id,
+                    "user_id": row.user_id,
+                    "table_id": row.table_id,
+                    "reservation_time": row.reservation_time,
+                    "status": row.status,
+                }
+                for row in rows
+            ]
+
     def update_status(
         self,
         reservation_id: int,

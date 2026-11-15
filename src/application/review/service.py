@@ -92,3 +92,28 @@ def submit_review(
     update_dish_bayesian_stats(db, payload.dish_id)
 
     return new_review
+
+
+# --- Moderation Services ---
+def get_pending_moderations(db: Session, skip: int = 0, limit: int = 50) -> list[ReviewModeration]:
+    return (
+        db.query(ReviewModeration)
+        .filter(ReviewModeration.status == "pending")
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+
+
+def update_moderation_status(
+    db: Session, review_id: int, status: str, staff_id: int, reason: str | None = None
+) -> ReviewModeration | None:
+    moderation = db.query(ReviewModeration).filter(ReviewModeration.review_id == review_id).first()
+    if moderation:
+        moderation.status = status
+        moderation.moderated_by = staff_id
+        moderation.moderated_at = func.now()
+        moderation.reason = reason
+        db.commit()
+        db.refresh(moderation)
+    return moderation
