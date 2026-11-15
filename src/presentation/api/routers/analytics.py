@@ -28,17 +28,21 @@ def recommend_for_customer(
 def api_get_summary(db: Annotated[Session, Depends(get_db)]) -> dict:
     return get_summary(db)
 
+
 @router.get("/revenue")
 def api_get_revenue(db: Annotated[Session, Depends(get_db)]) -> list:
     return get_revenue(db)
+
 
 @router.get("/table-turnover")
 def api_get_table_turnover(db: Annotated[Session, Depends(get_db)]) -> list:
     return get_table_turnover(db)
 
+
 @router.get("/demand-heatmap")
 def api_get_demand_heatmap(db: Annotated[Session, Depends(get_db)]) -> list:
     return get_demand_heatmap(db)
+
 
 @router.get("/no-show-rate")
 def api_get_noshow_rate(db: Annotated[Session, Depends(get_db)]) -> dict:
