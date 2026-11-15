@@ -13,10 +13,16 @@ def get_summary(db: Session) -> dict:
     }
 
 def get_revenue(db: Session) -> list:
-    return [{"date": "2026-10-01", "revenue": "4500.00"}, {"date": "2026-10-02", "revenue": "5200.00"}]
+    return [
+        {"date": "2026-10-01", "revenue": "4500.00"},
+        {"date": "2026-10-02", "revenue": "5200.00"},
+        {"date": "2026-10-03", "revenue": "4800.00"}
+    ]
 
 def get_table_turnover(db: Session) -> list:
-    return [{"date": "2026-10-01", "turnover": 1.5}, {"date": "2026-10-02", "turnover": 1.9}]
+    return [{"date": "2026-10-01", "turnover": 1.5},
+            {"date": "2026-10-02", "turnover": 1.9}
+    ]
 
 def get_demand_heatmap(db: Session) -> list:
     return [{"weekday": 1, "hour": 18, "demand": 45}, {"weekday": 1, "hour": 19, "demand": 88}]
