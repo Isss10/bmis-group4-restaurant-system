@@ -252,6 +252,7 @@ jobs:
           # Random per-run secret so tests never depend on a committed value.
           APP_JWT_SECRET_KEY: ${{ github.run_id }}-${{ github.sha }}-ci-only-not-a-real-secret
           APP_DB_NAME: restaurant_test
+          PYTHONPATH: .
         run: |
           pytest tests/unit \
             -m "not integration and not concurrency and not slow" \
