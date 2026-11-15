@@ -74,7 +74,7 @@ class ReservationRepository:
             # Check after locking, within the same transaction as the update.
             if user_id is not None and reservation.user_id != user_id:
                 raise permission_denied()
-            reservation.status = status  # type: ignore
+            reservation.status = status
             session.flush()
             session.refresh(reservation)
             return {
