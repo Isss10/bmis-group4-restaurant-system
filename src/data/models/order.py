@@ -1,6 +1,7 @@
-from sqlalchemy import String, Float, DateTime
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from __future__ import annotations
 from datetime import datetime
+from sqlalchemy import DateTime, Float, String
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.data.database import Base
 
 class Order(Base):
@@ -14,6 +15,6 @@ class Order(Base):
 
     items: Mapped[list["OrderItem"]] = relationship(
         "OrderItem",
-        back_populates="ordering",
+        back_populates="order",
         cascade="all, delete-orphan"
     )
