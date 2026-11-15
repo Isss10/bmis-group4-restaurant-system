@@ -54,8 +54,9 @@
       `{"id": 101, "items": ["pizza"], "status": "pending"}` — and its status-update methods
       return a canned success message without touching the database. The router mounts, so
       the endpoints respond 200, which is worse than failing: **it looks working and is
-      not.** Your proposal deadline for the reservation-list display module was 20 Nov and
-      for integration 23 Nov.
+      not.** Per the submitted proposal, Objective (b) assigns M3 "Implement the staff
+      backend module: reservation-list and food-order-list display, reservation-status
+      modification and order handling", **due 23 Nov 2026**.
       Until this reads real data you have no screenshots to put in §7.2 and nothing truthful
       to write in §7.3–§7.4. M1 has raised it with the group on 14 Nov.
 - [ ] §7.5 is where you can earn marks cheaply: explaining that authorisation is enforced

@@ -98,9 +98,14 @@
           allowed-transition table, no hold expiry**.
         - The reservations table has **no version column and no unique constraint**, so the
           20001 path has nothing to trigger it.
-      Your proposal deadline for the seat-time conflict-checking algorithm was 2 Nov and for
-      order submission 15 Nov. **This chapter cannot be written honestly until the code
-      lands.** M1 has raised it with the group on 14 Nov; please reply with a date.
+      Per the submitted proposal, Objective (a) assigns M2 "Implement the seat-reservation
+      module: booking flow, conflict check, temporary seat holds with automatic expiry and
+      reservation state machine" and M5 "Implement the ordering module: menu browsing,
+      category display and order submission" — **both due 15 Nov 2026, i.e. today.**
+      The database half sits under Objective (d): M8 owns "the relational database layer:
+      schema, transactions, optimistic locking, unique-constraint safety net", due 23 Nov.
+      **This chapter cannot be written honestly until the code lands.** M1 raised it with the
+      group on 14 Nov and again on 15 Nov; please reply with a date.
 - [ ] §6.4 and §6.6 are the two sections the examiner will read most closely, because they
       carry Objective (d). If the implementation is not finished by 27 Nov, write them as
       design and say so — an honest "specified, not yet demonstrated" costs less than a

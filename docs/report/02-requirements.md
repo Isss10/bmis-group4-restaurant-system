@@ -73,9 +73,10 @@
 
 - [ ] **Agree with M1 where the OWASP table lives** (see §2.3.1) before either of you
       writes it, or it will be printed twice and one copy will go stale.
-- [ ] **Objective lettering.** The proposal uses (a)–(i); the manual and REQUIREMENTS.md use
-      (a)–(g). Chapter 1 flags this too. Settle it once, group-wide, and use the same
-      lettering here.
+- [x] **Objective lettering — settled 15 Nov.** The submitted proposal uses **(a)–(g)** and
+      `REQUIREMENTS.md` §7 matches it; there is no discrepancy. Full mapping is in ch.1's
+      author notes. ⚠️ Do not cite the earlier (a)–(i) draft that circulated in the group
+      working folder — it is not the submitted proposal.
 - [ ] Six of the nine "open business rules" in REQUIREMENTS.md §6 (max table occupation,
       points earning rate and expiry, coupon stacking order, Bayesian `m`, recommender
       definition, no-show definition) were listed as **awaiting a group decision** with

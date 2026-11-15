@@ -67,6 +67,21 @@
 
 ## Author's notes — to resolve before merging
 
+- [ ] **The loyalty half of this chapter is not on `main` — verified 15 Nov.** M4's loyalty
+      work arrived via PR #24, which was a web "upload files" commit: all 8 loyalty files
+      (`src/application/membership/loyalty.py`, `src/data/repository/loyalty.py`,
+      `src/data/schema/loyalty.py`, `migration/0004_add_loyalty_tables.py`, three test files
+      and `LOYALTY_API.md`) landed inside a **nested duplicate directory**
+      `bmis-group4-restaurant-system-upload-20261107/`, not in the real `src/` tree.
+      `git grep -i loyalty origin/main -- src` returns **nothing**, and `main.py` never
+      imports it. So the points ledger, tiers and coupons — §8.3 to §8.5 — are currently
+      **not part of the running application**. Two further problems: the nested migration is
+      numbered `0004`, which collides with the real tree's `0004_add_membership_auth.py`
+      (Alembic would report multiple heads), and the nested copy carries its own stale
+      `src/`, so moving files across needs care.
+      **Do not write §8.3–§8.5 as delivered** until the loyalty module is properly landed in
+      `src/` with a renumbered migration. Per the submitted proposal, Objective (c) assigns
+      this module to **M10 and M4 jointly**, due **23 Nov 2026**.
 - [ ] **Two of your business rules were never confirmed as decided.**
       `REQUIREMENTS.md` §6 lists the points **earning rate and expiry window** (proposed:
       1 point per ¥10, expiring 12 months after earning) and the coupon **stacking order**

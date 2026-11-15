@@ -11,7 +11,7 @@
 
 # 11. Engineering Quality
 
-> Objective (h) is a first-class deliverable of this project, not a wrapper around the
+> Objective (f) is a first-class deliverable of this project, not a wrapper around the
 > features. This chapter is where the group demonstrates that the software was *engineered*
 > — and almost all of the evidence already exists in the repository. Assemble and explain it.
 

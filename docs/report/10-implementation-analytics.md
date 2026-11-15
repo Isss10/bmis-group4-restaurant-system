@@ -74,9 +74,11 @@
 
 - [ ] **The analytics router does not exist yet.** As of 14 Nov, on `main`, the router
       registry declares `/api/v1/analytics` but there is no `routers/analytics.py`, so the
-      prefix is not mounted — the loader skips missing modules by design. Your proposal
-      deadline for the dashboard layout was 30 Nov and for the recommender 3 Dec, and this
-      chapter is due 4 Dec, so the timing is tight but not yet broken. **§10.3's screenshot
+      prefix is not mounted — the loader skips missing modules by design. Per the submitted
+      proposal, Objective (e) assigns **M6 and M9** "Implement the manager dashboard (revenue
+      trends, table turnover, hourly demand heat map, no-show rate) and the hybrid
+      recommender evaluated offline with Precision@K and MAE", **due 3 Dec 2026**, and this
+      chapter is due 4 Dec — so the timing is tight but not yet broken. **§10.3's screenshot
       needs real running code**; without it this chapter has no evidence.
 - [ ] **The recommender definition was an open question.** `REQUIREMENTS.md` §6 lists the
       hybrid recommender definition as **open** with a 10 Nov deadline and the proposed

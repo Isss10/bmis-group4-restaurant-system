@@ -11,7 +11,7 @@
 
 # 12. Testing & Evaluation
 
-> This chapter carries Objective (c) and the evidence for NFR-01 and NFR-02, and it is the
+> This chapter carries Objective (d) and the evidence for NFR-01 and NFR-02, and it is the
 > chapter the examiner reads to decide whether the group's central claim is true. **It is
 > also, as of 14 November, the chapter with the largest gap between what the repository
 > appears to show and what it actually proves.** Read §12.4's author note before writing
@@ -146,12 +146,16 @@
       30 Nov. **Escalate to M1 and M2 immediately**; this is the project's headline technical
       claim and it is also the centrepiece of the presentation (manual §8.4).
 
-- [ ] **Objective lettering.** The proposal uses (a)–(i); the internal manual and
-      `REQUIREMENTS.md` §7 use (a)–(g), where the manual's (d) is "concurrency correctness +
-      testing" but the proposal's (c) is the testing objective and its (d) is the user manual.
-      §12.7 must use ONE lettering — ch.1 §1.6 flags the same issue. Settle it group-wide
-      before anyone writes an objective table, or the report will contradict itself in the
-      exact place the "Consistency" criterion examines.
+- [ ] **Objective lettering is settled — use the submitted proposal's (a)–(g).** M1 checked
+      the submitted PDF on 15 Nov: the proposal numbers its objectives **(a)–(g)**, where
+      **(d)** is *"Guarantee concurrency-correct booking through a relational database layer
+      and system integration, and conduct functional, integration and concurrency testing"*.
+      That matches `REQUIREMENTS.md` §7 exactly, so there is no discrepancy to reconcile.
+      ⚠️ An earlier draft of the proposal that circulated in the group working folder used
+      (a)–(i) and put the user manual under (d); **that draft is not the submitted one — do
+      not cite it.** This chapter's objective is (d), its proposal deadline is **30 Nov**
+      (M4 and M7 are named as owners of "Execute functional and integration testing,
+      end-to-end front-end/back-end integration and the automated concurrency test").
 
 - [ ] You also own the front matter (cover, contents, list of figures/tables) and the
       **8–12 page user manual** for the PoC ZIP. `docs/user-manual/` currently holds only

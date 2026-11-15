@@ -50,17 +50,17 @@ into five functional modules:
 
 | Module | Purpose | Proposal objective |
 |---|---|---|
-| Reservation | Browse free slots, book a table, cancel, and manage the booking lifecycle | (a), (f) |
+| Reservation | Browse free slots, book a table, cancel, and manage the booking lifecycle | (a), (d) |
 | Ordering | Browse the menu by category, submit an order against an active reservation | (a) |
-| Membership & Loyalty | Registration and login, role-based access, points ledger, tiers, coupons | (e) |
-| Ratings & Reviews | Order-verified reviews, moderation queue, Bayesian-average ranking | (e) |
-| Analytics | Revenue trend, table turnover, hourly demand heat map, no-show rate, dish recommendation | (g) |
+| Membership & Loyalty | Registration and login, role-based access, points ledger, tiers, coupons | (c) |
+| Ratings & Reviews | Order-verified reviews, moderation queue, Bayesian-average ranking | (c) |
+| Analytics | Revenue trend, table turnover, hourly demand heat map, no-show rate, dish recommendation | (e) |
 
 A staff backend exposes reservation and order management to waiters, managers and
 administrators (objective b). Cross-cutting engineering concerns — a documented REST API,
 automated testing, continuous integration, security hardening, audit logging and
-containerised deployment — are treated as first-class deliverables rather than as
-afterthoughts (objective h).
+containerised deployment — together with the user manual are treated as first-class
+deliverables rather than as afterthoughts (objective f).
 
 The full functional and non-functional breakdown, with stable requirement identifiers, is in
 chapter 2 and in `docs/requirements/REQUIREMENTS.md`.
@@ -171,12 +171,16 @@ this draft and will be renumbered globally at merge time.
 - [ ] **Add a system context diagram** as Figure 1.1 (restaurant staff, customers, the
       database, the expiry job). Chapter 4 has the full context model; a simplified version
       belongs here so the reader has an orientation before the requirements chapter.
-- [ ] **Confirm the objective lettering against the submitted proposal.** The proposal uses
-      (a)–(i); the internal manual renumbered them (a)–(g) when it froze the module split,
-      and `REQUIREMENTS.md` §7 follows the manual. This chapter currently uses the proposal
-      lettering because that is the document the examiner has. **This inconsistency is
-      exactly what the "Consistency" criterion penalises** — settle on one lettering for the
-      whole report and apply it in every chapter, then note the mapping once, here.
+- [x] **Objective lettering — settled 15 Nov against the submitted proposal PDF.** The
+      submitted proposal numbers its objectives **(a)–(g)**, and `REQUIREMENTS.md` §7 uses
+      the same lettering, so there is no discrepancy to reconcile. Mapping, for every chapter
+      to use: (a) customer-side module · (b) staff backend · (c) membership & loyalty +
+      ratings & reviews · (d) concurrency-correct booking **and** functional/integration/
+      concurrency testing · (e) manager dashboard + hybrid recommender · (f) engineering
+      quality **and** the user manual · (g) proposal, updates, presentation.
+      ⚠️ An earlier draft that circulated in the group working folder used (a)–(i) and put
+      the user manual under (d). **That draft is not the submitted one — do not cite it.**
+      Chapters 11 and 12 were corrected on 15 Nov for exactly this reason.
 - [ ] §1.4 claims a Vue 3 client for all three surfaces. The customer app and the staff app
       exist; **verify the manager dashboard client is actually delivered before the merge**,
       or reword to match what ships. Do not let the report promise a component the PoC lacks.
