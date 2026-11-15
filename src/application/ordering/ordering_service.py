@@ -25,26 +25,15 @@ class OrderingService:
                 raise ValueError(f"Dish id={dish_id} does not exist")
             subtotal = dish.price * quantity
             total_price += subtotal
-            order_items.append({
-                "dish_id": dish.id,
-                "quantity": quantity,
-                "price": dish.price
-            })
+            order_items.append({"dish_id": dish.id, "quantity": quantity, "price": dish.price})
 
         # 创建主订单
-        order = Order(
-            customer_name=dto.customer_name,
-            total_price=total_price,
-            status="pending"
-        )
+        order = Order(customer_name=dto.customer_name, total_price=total_price, status="pending")
         order = await create_order(session, order)
 
         for oi in order_items:
             order_item = OrderItem(
-                order_id=order.id,
-                dish_id=oi["dish_id"],
-                quantity=oi["quantity"],
-                price=oi["price"]
+                order_id=order.id, dish_id=oi["dish_id"], quantity=oi["quantity"], price=oi["price"]
             )
             await create_order_item(session, order_item)
 

@@ -31,7 +31,7 @@ async def test_submit_order():
     payload = {
         "dish_items": [{"dish_id": 1, "quantity": 2}],
         "customer_name": "test",
-        "table_no": "A01"
+        "table_no": "A01",
     }
     async with AsyncClient(app=app, base_url="http://test") as client:
         res = await client.post("/api/v1/orders/", json=payload)
@@ -47,3 +47,4 @@ async def test_submit_order_bad_data():
     async with AsyncClient(app=app, base_url="http://test") as client:
         res = await client.post("/api/v1/orders/", json=payload)
         assert res.status_code in (400, 422)
+

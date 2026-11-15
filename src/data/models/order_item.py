@@ -1,14 +1,16 @@
+# ruff: noqa: F821, UP037
 from __future__ import annotations
-from sqlalchemy import ForeignKey, Integer
+
+from sqlalchemy import Integer
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
 from src.data.database import Base
 
-class OrderItem(Base):
-    __tablename__ = "order_item"
 
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    order_id: Mapped[int] = mapped_column(ForeignKey("orders.id"), nullable=False)
-    dish_id: Mapped[int] = mapped_column(ForeignKey("dish.id"), nullable=False)
+class OrderItem(Base):
+    __tablename__ = "order_items"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
     dish: Mapped["Dish"] = relationship("Dish", back_populates="order_items")

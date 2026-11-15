@@ -9,5 +9,6 @@ async def create_order(session: AsyncSession, order: Order):
     await session.flush()
     return order
 
+
 async def create_order_item(session: AsyncSession, item: OrderItem):
     session.add(item)

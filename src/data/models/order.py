@@ -1,8 +1,13 @@
+# ruff: noqa: F821, UP037
 from __future__ import annotations
+
 from datetime import datetime
+
 from sqlalchemy import DateTime, Float, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
 from src.data.database import Base
+
 
 class Order(Base):
     __tablename__ = "orders"

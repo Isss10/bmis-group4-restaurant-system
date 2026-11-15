@@ -11,6 +11,7 @@ async def get_dishes_by_category(session: AsyncSession, category: str | None = N
     result = await session.execute(stmt)
     return result.scalars().all()
 
+
 async def get_dish_by_id(session: AsyncSession, dish_id: int):
     stmt = select(Dish).where(Dish.id == dish_id)
     result = await session.execute(stmt)

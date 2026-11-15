@@ -12,9 +12,7 @@ router = APIRouter(prefix="/orders", tags=["orders"])
 
 @router.post("/", response_model=OrderSchema)
 async def create_order(
-    request: Request,
-    order_data: OrderCreateSchema,
-    db: Annotated[AsyncSession, Depends(get_db)]
+    request: Request, order_data: OrderCreateSchema, db: Annotated[AsyncSession, Depends(get_db)]
 ):
     try:
         service = OrderingService(db)
@@ -24,10 +22,7 @@ async def create_order(
 
 
 @router.get("/{order_id}", response_model=OrderSchema)
-async def get_order(
-    order_id: int,
-    db: Annotated[AsyncSession, Depends(get_db)]
-):
+async def get_order(order_id: int, db: Annotated[AsyncSession, Depends(get_db)]):
     service = OrderingService(db)
     order = await service.get_order_by_id(order_id)
     if not order:
@@ -36,8 +31,6 @@ async def get_order(
 
 
 @router.get("/", response_model=list[OrderSchema])
-async def list_orders(
-    db: Annotated[AsyncSession, Depends(get_db)]
-):
+async def list_orders(db: Annotated[AsyncSession, Depends(get_db)]):
     service = OrderingService(db)
     return await service.list_all_orders()

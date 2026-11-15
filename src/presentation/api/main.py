@@ -5,6 +5,7 @@ The OpenAPI document this exposes at `/docs` and `/openapi.json`
 Export a snapshot for the archive with:
     python scripts/export_openapi.py
 """
+
 from __future__ import annotations
 
 import logging
@@ -57,6 +58,7 @@ to the server log and to any audit record.
 
 class HealthResponse(BaseModel):
     """Liveness/readiness payload."""
+
     status: str
     """`ok` when the process is healthy."""
     app: str
@@ -67,6 +69,7 @@ class HealthResponse(BaseModel):
 
 class ServiceStatus(BaseModel):
     """Per-dependency status for the readiness probe."""
+
     name: str
     status: str
     detail: str | None = None
@@ -81,6 +84,7 @@ class CurrentIdentity(BaseModel):
     membership module's own endpoints, and returning them here would let every
     frontend depend on a shape the membership owner has to keep stable.
     """
+
     user_id: str
     """The token's `sub` claim — the user's id as a string."""
     role: Role
@@ -144,10 +148,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(_build_auth_router())
 
     from src.presentation.api.routers.membership import install_membership
+
     install_membership(app)
 
     # Manually register ordering router, bypass silent-fail auto loader
     from src.presentation.api.routers.ordering import router as ordering_router
+
     app.include_router(ordering_router, tags=["ordering"])
 
     # Module routers are imported lazily inside this function so that a syntax
@@ -173,6 +179,7 @@ def _build_root_router(cfg: Settings) -> APIRouter:
             "api_base": "/api/v1",
             "docs": "/docs",
         }
+
     return router
 
 
@@ -236,6 +243,7 @@ def _build_health_router() -> APIRouter:
             data=payload,
             request_id=getattr(request.state, REQUEST_ID_ATTR, None),
         )
+
     return router
 
 
@@ -283,6 +291,7 @@ def _build_auth_router() -> APIRouter:
             data=payload,
             request_id=getattr(request.state, REQUEST_ID_ATTR, None),
         )
+
     return router
 
 
@@ -334,6 +343,7 @@ def _register_module_routers(app: FastAPI) -> None:
     One module's typo must not take the entire API down with it.
     """
     import importlib
+
     for name, (path, prefix) in _MODULE_ROUTERS.items():
         try:
             module = importlib.import_module(path)
