@@ -1,16 +1,16 @@
-from pydantic import BaseModel
-from typing import List, Optional
 from datetime import datetime
+
+from pydantic import BaseModel, ConfigDict
+
 
 class DishSchema(BaseModel):
     id: int
     name: str
     category: str
     price: float
-    image_url: Optional[str] = None
+    image_url: str | None = None
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class OrderItemCreateSchema(BaseModel):
@@ -23,15 +23,14 @@ class OrderItemSchema(BaseModel):
     dish_id: int
     quantity: int
     price: float
-    dish: Optional[DishSchema] = None
+    dish: DishSchema | None = None
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class OrderCreateSchema(BaseModel):
     customer_name: str
-    items: List[OrderItemCreateSchema]
+    items: list[OrderItemCreateSchema]
 
 
 class OrderSchema(BaseModel):
@@ -40,7 +39,6 @@ class OrderSchema(BaseModel):
     total_price: float
     status: str
     created_at: datetime
-    items: List[OrderItemSchema] = []
+    items: list[OrderItemSchema] = []
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)

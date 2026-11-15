@@ -1,8 +1,9 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from src.data.repository.dish_repo import get_dishes_by_category, get_dish_by_id
-from src.data.repository.order_repo import create_order, create_order_item
+
 from src.data.models.order import Order
 from src.data.models.order_item import OrderItem
+from src.data.repository.dish_repo import get_dish_by_id, get_dishes_by_category
+from src.data.repository.order_repo import create_order, create_order_item
 from src.data.schema.order_schema import OrderCreateSchema
 
 

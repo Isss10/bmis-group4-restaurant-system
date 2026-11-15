@@ -16,7 +16,7 @@ live.
 What gets recorded
 ------------------
 Every state-changing action performed by staff (waiter / manager / admin) —
-reservation status changes, order handling, review moderation, points
+reservation status changes, ordering handling, review moderation, points
 adjustments, coupon issuance, schema-affecting admin actions. Read-only
 operations are not audited; that would bury the signal in noise.
 
@@ -80,8 +80,8 @@ ACTION_RESERVATION_STATUS_CHANGED = "reservation.status_changed"
 ACTION_RESERVATION_CANCELLED = "reservation.cancelled"
 ACTION_RESERVATION_NO_SHOW = "reservation.no_show"
 ACTION_SEAT_HOLD_EXPIRED = "seat_hold.expired"
-ACTION_ORDER_CREATED = "order.created"
-ACTION_ORDER_STATUS_CHANGED = "order.status_changed"
+ACTION_ORDER_CREATED = "ordering.created"
+ACTION_ORDER_STATUS_CHANGED = "ordering.status_changed"
 ACTION_REVIEW_SUBMITTED = "review.submitted"
 ACTION_REVIEW_MODERATED = "review.moderated"
 ACTION_REVIEW_REMOVED = "review.removed"

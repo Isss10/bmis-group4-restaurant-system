@@ -1,6 +1,8 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from src.data.models.dish import Dish
+
 
 async def get_dishes_by_category(session: AsyncSession, category: str | None = None):
     stmt = select(Dish)

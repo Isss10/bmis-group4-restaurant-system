@@ -3,7 +3,7 @@
 Implements section 4.2 of `JC2001-Group4-协作与统一标准手册.md`. The contract is
 **mandatory on every endpoint**, which is precisely why it lives here rather than
 being assembled per-router: ten people writing five modules cannot each remember
-five fields in the same order.
+five fields in the same ordering.
 
 Success envelope::
 

@@ -2,8 +2,8 @@
 
 The staff module never touches another module's tables (ARCHITECTURE.md §7):
 every reservation read and write goes through the reservation module's
-service. This file is where the eventual order-facing methods will live once
-the ordering module ships its backend; until then the order endpoints in
+service. This file is where the eventual ordering-facing methods will live once
+the ordering module ships its backend; until then the ordering endpoints in
 ``src/presentation/api/routers/staff.py`` stay placeholder-only.
 """
 
