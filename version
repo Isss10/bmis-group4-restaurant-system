@@ -1,0 +1,59 @@
+-- 餐桌表，增加 version 乐观锁
+CREATE TABLE restaurant_tables (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    table_number VARCHAR(20) NOT NULL UNIQUE,
+    capacity INT NOT NULL,
+    status ENUM('available', 'reserved') DEFAULT 'available',
+    version INT NOT NULL DEFAULT 1 -- 乐观锁版本号
+);
+
+-- 预订表，增加唯一约束：同一餐桌 + 同一预订时间不可重复
+CREATE TABLE bookings (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    customer_id INT NOT NULL,
+    table_id INT NOT NULL,
+    booking_datetime DATETIME NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (customer_id) REFERENCES customers(id),
+    FOREIGN KEY (table_id) REFERENCES restaurant_tables(id),
+    UNIQUE KEY uk_table_booking_time (table_id, booking_datetime) -- 唯一约束
+);
+from sqlalchemy import Column, Integer, String, DateTime, Enum, ForeignKey, UniqueConstraint
+from sqlalchemy.orm import relationship
+from datetime import datetime
+
+class RestaurantTable(Base):
+    __tablename__ = "restaurant_tables"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    table_number = Column(String(20), unique=True, nullable=False)
+    capacity = Column(Integer, nullable=False)
+    status = Column(Enum("available", "reserved"), default="available")
+    version = Column(Integer, nullable=False, default=1) #乐观锁
+
+    bookings = relationship("Booking", back_populates="table")
+
+
+class Booking(Base):
+    __tablename__ = "bookings"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    customer_id = Column(Integer, ForeignKey("customers.id"), nullable=False)
+    table_id = Column(Integer, ForeignKey("restaurant_tables.id"), nullable=False)
+    booking_datetime = Column(DateTime, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("table_id", "booking_datetime", name="uk_table_booking_time"),
+    )
+    customer = relationship("Customer")
+    table = relationship("RestaurantTable", back_populates="bookings")
+      -- 初始化餐桌种子
+INSERT INTO restaurant_tables (table_number, capacity, status, version)
+VALUES
+('T01', 2, 'available', 1),
+('T02', 4, 'available', 1),
+('T03', 6, 'available', 1);
+
+-- 初始化顾客示例
+INSERT INTO customers (name, phone, email)
+VALUES
+('Alice', '13800138000', 'alice@example.com');
