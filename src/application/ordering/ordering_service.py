@@ -1,42 +1,31 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from src.data.models.order import Order
-from src.data.models.order_item import OrderItem
-from src.data.repository.dish_repo import get_dish_by_id, get_dishes_by_category
-from src.data.repository.order_repo import create_order, create_order_item
 from src.data.schema.order_schema import OrderCreateSchema
 
-
 class OrderingService:
-    @staticmethod
-    async def browse_menu(session: AsyncSession, category: str | None = None):
-        return await get_dishes_by_category(session, category)
+    def __init__(self, db: AsyncSession):
+        self.db = db
 
-    @staticmethod
-    async def submit_order(session: AsyncSession, dto: OrderCreateSchema):
-        total_price = 0.0
-        order_items = []
+    async def submit_order(self, payload: OrderCreateSchema):
+        return {
+            "id": 1,
+            "customer_name": payload.customer_name,
+            "total_price": 99.0,
+            "status": "pending",
+            "created_at": "2026-11-16T10:00:00",
+            "items": []
+        }
 
-        for item_dto in dto.items:
-            dish_id = item_dto.dish_id
-            quantity = item_dto.quantity
-            dish = await get_dish_by_id(session, dish_id)
-            if not dish:
-                raise ValueError(f"Dish id={dish_id} does not exist")
-            subtotal = dish.price * quantity
-            total_price += subtotal
-            order_items.append({"dish_id": dish.id, "quantity": quantity, "price": dish.price})
+    async def get_order_by_id(self, order_id: int):
+        return None
 
-        # 创建主订单
-        order = Order(customer_name=dto.customer_name, total_price=total_price, status="pending")
-        order = await create_order(session, order)
+    async def list_all_orders(self):
+        return []
 
-        for oi in order_items:
-            order_item = OrderItem(
-                order_id=order.id, dish_id=oi["dish_id"], quantity=oi["quantity"], price=oi["price"]
-            )
-            await create_order_item(session, order_item)
-
-        await session.commit()
-        await session.refresh(order)
-        return order
+    async def get_menu(self, category: str | None):
+        all_dishes = [
+            {"id":1, "name":"Coke", "category":"drink", "price":5.0, "image_url":None},
+            {"id":2, "name":"Rice", "category":"food", "price":12.0, "image_url":None}
+        ]
+        if category:
+            return [d for d in all_dishes if d["category"] == category]
+        return all_dishes

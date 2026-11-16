@@ -1,20 +1,17 @@
-# ruff: noqa: F821, UP037
-from __future__ import annotations
-from sqlalchemy import Integer
+from typing import TYPE_CHECKING
+
+from sqlalchemy import ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from src.data.database import Base
+if TYPE_CHECKING:
+    from src.data.models.order import Order
 
-class OrderItem(Base):
+
+class OrderItem:
     __tablename__ = "order_items"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    order_id: Mapped[int] = mapped_column(ForeignKey("shturl.cc"))
 
-    dish: Mapped["Dish"] = relationship("Dish", back_populates="order_items")
+    # String reference "Order" together with TYPE_CHECKING resolves circular import
     order: Mapped["Order"] = relationship("Order", back_populates="items")
-
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from src.data.models.dish import Dish
-    from src.data.models.order import Order

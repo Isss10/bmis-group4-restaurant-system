@@ -153,8 +153,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     # Manually register ordering router, bypass silent-fail auto loader
     from src.presentation.api.routers.ordering import router as ordering_router
-
-    app.include_router(ordering_router, tags=["ordering"])
+    app.include_router(ordering_router, prefix="/api/v1", tags=["ordering"])
 
     # Module routers are imported lazily inside this function so that a syntax
     # error in one module does not prevent the health endpoint from starting —
