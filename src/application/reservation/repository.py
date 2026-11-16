@@ -1,5 +1,4 @@
-from datetime import datetime
-
+from datetime import datetime, timedelta
 from src.common.errors import permission_denied
 from src.data.database import session_scope
 
@@ -7,40 +6,38 @@ from .models import Reservation, ReservationStatus
 
 
 class ReservationRepository:
-    def create(self, user_id: str, table_id: int, reservation_time: datetime) -> dict:
+
+    def create(
+        self,
+        user_id: str,
+        table_id: int,
+        reservation_time: datetime,
+        end_time: datetime | None = None,
+        expires_at: datetime | None = None,
+        status: ReservationStatus = ReservationStatus.PENDING,
+    ) -> dict:
+        if end_time is None:
+            end_time = reservation_time + timedelta(minutes=120)
+
         with session_scope() as session:
             reservation = Reservation(
                 user_id=user_id,
                 table_id=table_id,
                 reservation_time=reservation_time,
-                status=ReservationStatus.PENDING,
+                end_time=end_time,
+                expires_at=expires_at,
+                status=status,
             )
             session.add(reservation)
             session.flush()
             session.refresh(reservation)
-            res_id = reservation.id
-            res_time = reservation.reservation_time
-            res_status = reservation.status
             return {
-                "id": res_id,
-                "reservation_time": res_time,
-                "status": res_status,
+                "id": reservation.id,
+                "reservation_time": reservation.reservation_time,
+                "status": reservation.status,
             }
 
     def list_reservations(self) -> list[dict]:
-        """Return every reservation, oldest ``reservation_time`` first.
-
-        Added by the staff module owner (Objective b) for the back-office list
-        view: ARCHITECTURE.md §7 forbids the staff module from reading the
-        ``reservations`` table directly, so the read has to live here, behind
-        the reservation module's own boundary. Strictly additive — no existing
-        behaviour changes; reservation-module owner please eyeball this in
-        review.
-
-        Values are copied into plain dicts *inside* the session scope so the
-        caller never touches a detached ORM instance (same discipline as
-        ``create`` above).
-        """
         with session_scope() as session:
             rows = session.query(Reservation).order_by(Reservation.reservation_time).all()
             return [
@@ -70,8 +67,6 @@ class ReservationRepository:
             )
             if not reservation:
                 return None
-            # The public cancellation route always supplies its verified subject.
-            # Check after locking, within the same transaction as the update.
             if user_id is not None and reservation.user_id != user_id:
                 raise permission_denied()
             reservation.status = status  # type: ignore
@@ -82,3 +77,42 @@ class ReservationRepository:
                 "reservation_time": reservation.reservation_time,
                 "status": reservation.status,
             }
+
+    def find_overlapping_reservations(
+        self,
+        table_id: int,
+        start_time: datetime,
+        end_time: datetime,
+        active_statuses: list[ReservationStatus],
+        exclude_id: int | None = None,
+    ) -> list[dict]:
+        with session_scope() as session:
+            query = session.query(Reservation).filter(
+                Reservation.table_id == table_id,
+                Reservation.status.in_(active_statuses),
+                Reservation.reservation_time < end_time,
+                Reservation.end_time > start_time,
+            )
+            if exclude_id:
+                query = query.filter(Reservation.id != exclude_id)
+            rows = query.all()
+            return [
+                {
+                    "id": r.id, 
+                    "status": r.status
+                } 
+                for r in rows
+            ]
+
+    def find_expired_holds(self, current_time: datetime) -> list[int]:
+        with session_scope() as session:
+            rows = (
+                session.query(Reservation.id)
+                .filter(
+                    Reservation.status == ReservationStatus.PENDING,
+                    Reservation.expires_at < current_time,
+                )
+                .all()
+            )
+            return [r.id for r in rows]
+
