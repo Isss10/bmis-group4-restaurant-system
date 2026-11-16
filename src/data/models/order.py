@@ -21,5 +21,5 @@ class Order(Base):
     items: Mapped[list["OrderItem"]] = relationship(
         "src.data.models.order_item.OrderItem",
         back_populates="order",
-        cascade="all, delete‑orphan"
+        cascade="all, delete-orphan"
     )

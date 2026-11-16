@@ -1,11 +1,12 @@
 from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.ordering.ordering_service import OrderingService
 from src.common.envelope import Envelope
 from src.data.database import get_db
-from src.data.schema.order_schema import OrderCreateSchema, OrderSchema, DishSchema
+from src.data.schema.order_schema import DishSchema, OrderCreateSchema, OrderSchema
 
 router = APIRouter(prefix="/orders", tags=["ordering"])
 

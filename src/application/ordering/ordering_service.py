@@ -1,5 +1,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from src.data.schema.order_schema import OrderCreateSchema
+
 
 class OrderingService:
     def __init__(self, db: AsyncSession):

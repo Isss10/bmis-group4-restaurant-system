@@ -19,5 +19,5 @@ class Dish(Base):
     order_items: Mapped[list["OrderItem"]] = relationship(
         "src.data.models.order_item.OrderItem",
         back_populates="dish",
-        cascade="all, delete‑orphan"
+        cascade="all, delete-orphan"
     )
