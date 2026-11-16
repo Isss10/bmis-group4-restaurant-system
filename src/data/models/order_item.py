@@ -3,15 +3,26 @@ from typing import TYPE_CHECKING
 from sqlalchemy import ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from src.data.database import Base
+
 if TYPE_CHECKING:
+    from src.data.models.dish import Dish
     from src.data.models.order import Order
 
 
-class OrderItem:
+class OrderItem(Base):
     __tablename__ = "order_items"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    order_id: Mapped[int] = mapped_column(ForeignKey("shturl.cc"))
+    order_id: Mapped[int] = mapped_column(ForeignKey("orders.id"))
+    dish_id: Mapped[int] = mapped_column(ForeignKey("dish.id"))
 
-    # String reference "Order" together with TYPE_CHECKING resolves circular import
-    order: Mapped["Order"] = relationship("Order", back_populates="items")
+    order: Mapped["Order"] = relationship(
+        "src.data.models.order.Order",
+        back_populates="items"
+    )
+
+    dish: Mapped["Dish"] = relationship(
+        "src.data.models.dish.Dish",
+        back_populates="order_items"
+    )
