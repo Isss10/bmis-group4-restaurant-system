@@ -14,7 +14,7 @@ class OrderingService:
             "total_price": 99.0,
             "status": "pending",
             "created_at": "2026-11-16T10:00:00",
-            "items": []
+            "items": [],
         }
 
     async def get_order_by_id(self, order_id: int):
@@ -25,8 +25,8 @@ class OrderingService:
 
     async def get_menu(self, category: str | None):
         all_dishes = [
-            {"id":1, "name":"Coke", "category":"drink", "price":5.0, "image_url":None},
-            {"id":2, "name":"Rice", "category":"food", "price":12.0, "image_url":None}
+            {"id": 1, "name": "Coke", "category": "drink", "price": 5.0, "image_url": None},
+            {"id": 2, "name": "Rice", "category": "food", "price": 12.0, "image_url": None},
         ]
         if category:
             return [d for d in all_dishes if d["category"] == category]

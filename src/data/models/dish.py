@@ -17,7 +17,5 @@ class Dish(Base):
     image_url: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     order_items: Mapped[list["OrderItem"]] = relationship(
-        "src.data.models.order_item.OrderItem",
-        back_populates="dish",
-        cascade="all, delete-orphan"
+        "src.data.models.order_item.OrderItem", back_populates="dish", cascade="all, delete-orphan"
     )

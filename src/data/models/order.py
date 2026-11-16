@@ -19,7 +19,5 @@ class Order(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     items: Mapped[list["OrderItem"]] = relationship(
-        "src.data.models.order_item.OrderItem",
-        back_populates="order",
-        cascade="all, delete-orphan"
+        "src.data.models.order_item.OrderItem", back_populates="order", cascade="all, delete-orphan"
     )

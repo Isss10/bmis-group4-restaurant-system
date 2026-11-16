@@ -17,12 +17,6 @@ class OrderItem(Base):
     order_id: Mapped[int] = mapped_column(ForeignKey("orders.id"))
     dish_id: Mapped[int] = mapped_column(ForeignKey("dish.id"))
 
-    order: Mapped["Order"] = relationship(
-        "src.data.models.order.Order",
-        back_populates="items"
-    )
+    order: Mapped["Order"] = relationship("src.data.models.order.Order", back_populates="items")
 
-    dish: Mapped["Dish"] = relationship(
-        "src.data.models.dish.Dish",
-        back_populates="order_items"
-    )
+    dish: Mapped["Dish"] = relationship("src.data.models.dish.Dish", back_populates="order_items")

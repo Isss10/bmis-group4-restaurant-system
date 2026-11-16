@@ -5,7 +5,9 @@ from httpx import ASGITransport, AsyncClient
 @pytest.fixture(scope="function")
 async def app():
     from src.presentation.api.main import app as real_app
+
     yield real_app
+
 
 @pytest.mark.asyncio
 async def test_get_menu_no_category(app):
@@ -19,6 +21,7 @@ async def test_get_menu_no_category(app):
         assert json_resp["code"] == 0
         assert isinstance(json_resp["data"], list)
 
+
 @pytest.mark.asyncio
 async def test_get_menu_with_category(app):
     transport = ASGITransport(app=app)
@@ -31,12 +34,10 @@ async def test_get_menu_with_category(app):
         assert json_resp["code"] == 0
         assert isinstance(json_resp["data"], list)
 
+
 @pytest.mark.asyncio
 async def test_submit_order(app):
-    payload = {
-        "items": [{"dish_id": 1, "quantity": 2}],
-        "customer_name": "test"
-    }
+    payload = {"items": [{"dish_id": 1, "quantity": 2}], "customer_name": "test"}
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -44,6 +45,7 @@ async def test_submit_order(app):
         assert res.status_code == 200
         json_resp = res.json()
         assert json_resp["code"] == 0
+
 
 @pytest.mark.asyncio
 async def test_submit_order_bad_data(app):
