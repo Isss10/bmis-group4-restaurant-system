@@ -2,6 +2,14 @@
   <div class="container">
     <h1>Restaurant Ordering System</h1>
 
+<nav class="page-nav">
+  <button @click="currentPage = 'ordering'">Menu</button>
+  <button @click="currentPage = 'analytics'">Manager Dashboard</button>
+</nav>
+<AnalyticsDashboard v-if="currentPage === 'analytics'" />
+
+<div v-else>
+
     <!-- Category Filter -->
     <div class="category-bar">
       <button
@@ -36,12 +44,17 @@
       </div>
     </div>
   </div>
+  </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
+
+import AnalyticsDashboard from './components/AnalyticsDashboard.vue'
+
+const currentPage = ref<'ordering' | 'analytics'>('ordering')
 
 interface Food {
   id: number
