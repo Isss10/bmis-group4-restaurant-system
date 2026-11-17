@@ -8,7 +8,7 @@ from src.common.envelope import Envelope
 from src.data.database import get_db
 from src.data.schema.order_schema import DishSchema, OrderCreateSchema, OrderSchema
 
-router = APIRouter(prefix="/orders", tags=["ordering"])
+router = APIRouter()
 
 
 @router.get("/menu", response_model=Envelope[list[DishSchema]])
