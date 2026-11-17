@@ -25,6 +25,7 @@ def upgrade() -> None:
         sa.Column("name", sa.String(length=100), nullable=False),
         sa.Column("category", sa.String(length=50), nullable=False),
         sa.Column("price", sa.Float(), nullable=False),
+        sa.Column("description", sa.String(length=255), nullable=True),
         sa.Column("image_url", sa.String(length=255), nullable=True),
         sa.PrimaryKeyConstraint("id"),
     )

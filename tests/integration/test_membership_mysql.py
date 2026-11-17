@@ -269,7 +269,7 @@ def test_alembic_up_down_up_builds_membership_from_empty_mysql(
         # Reset only that marker after proving no business tables remain.
         with engine.connect() as connection:
             versions = set(connection.scalars(text("SELECT version_num FROM alembic_version")))
-        if versions - {"0004"}:
+        if not versions.issubset({"0004", "97393cdd0b6c"}):
             pytest.fail("Unexpected scratch migration marker; refusing to reset it")
         command.stamp(cfg, "base")
     expected = {
