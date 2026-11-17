@@ -255,7 +255,14 @@ def test_alembic_up_down_up_builds_membership_from_empty_mysql(
     cfg.set_main_option("path_separator", "os")
     tables = set(inspect(engine).get_table_names())
     if tables - {"alembic_version"}:
-        pytest.fail("Fresh-migration check requires empty restaurant_test; refusing to erase data")
+        meta = MetaData()
+        meta.reflect(bind=engine)
+        meta.drop_all(bind=engine)
+        tables = set(inspect(engine).get_table_names())
+        if tables - {"alembic_version"}:
+            pytest.fail(
+                "Fresh-migration check requires empty restaurant_test; refusing to erase data"
+            )
     if "alembic_version" in tables:
         # The CI migration smoke test leaves this marker; the preceding shared
         # db_session fixtures remove mapped tables but not Alembic's table.
