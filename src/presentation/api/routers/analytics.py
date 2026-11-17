@@ -3,16 +3,18 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from src.application.analytics.schemas import DashboardStats, RecommendationResponse
-from src.application.analytics.service import get_dashboard_stats, get_hybrid_recommendations
+from src.application.analytics.schemas import RecommendationResponse
+from src.application.analytics.service import (
+    get_demand_heatmap,
+    get_hybrid_recommendations,
+    get_noshow_rate,
+    get_revenue,
+    get_summary,
+    get_table_turnover,
+)
 from src.data.database import get_db
 
 router = APIRouter(prefix="/analytics", tags=["Analytics"])
-
-
-@router.get("/dashboard", response_model=DashboardStats)
-def get_manager_dashboard(db: Annotated[Session, Depends(get_db)]) -> DashboardStats:
-    return get_dashboard_stats(db)
 
 
 @router.get("/recommendations/{customer_id}", response_model=list[RecommendationResponse])
@@ -20,3 +22,28 @@ def recommend_for_customer(
     customer_id: int, db: Annotated[Session, Depends(get_db)]
 ) -> list[RecommendationResponse]:
     return get_hybrid_recommendations(db, customer_id)
+
+
+@router.get("/summary")
+def api_get_summary(db: Annotated[Session, Depends(get_db)]) -> dict:
+    return get_summary(db)
+
+
+@router.get("/revenue")
+def api_get_revenue(db: Annotated[Session, Depends(get_db)]) -> list:
+    return get_revenue(db)
+
+
+@router.get("/table-turnover")
+def api_get_table_turnover(db: Annotated[Session, Depends(get_db)]) -> list:
+    return get_table_turnover(db)
+
+
+@router.get("/demand-heatmap")
+def api_get_demand_heatmap(db: Annotated[Session, Depends(get_db)]) -> list:
+    return get_demand_heatmap(db)
+
+
+@router.get("/no-show-rate")
+def api_get_noshow_rate(db: Annotated[Session, Depends(get_db)]) -> dict:
+    return get_noshow_rate(db)
