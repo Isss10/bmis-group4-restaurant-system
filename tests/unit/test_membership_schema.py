@@ -212,7 +212,11 @@ def test_main_database_upgrade_and_module_rollback_preserve_business_data(tmp_pa
             assert set(inspect(connection).get_table_names()) == {"alembic_version"}
         command.upgrade(config, "head")
         with engine.connect() as connection:
-            assert set(inspect(connection).get_table_names()) == before_tables | _AUTH_TABLES | {"dishes", "orders", "order_items"}
+            assert set(inspect(connection).get_table_names()) == before_tables | _AUTH_TABLES | {
+                "dishes",
+                "orders",
+                "order_items",
+            }
     finally:
         engine.dispose()
 
