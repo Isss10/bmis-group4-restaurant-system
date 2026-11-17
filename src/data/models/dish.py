@@ -8,7 +8,7 @@ from src.data.database import Base
 
 
 class Dish(Base):
-    __tablename__ = "dish"
+    __tablename__ = "dishes"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
