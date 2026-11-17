@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 import pytest
+from alembic import command
+from alembic.config import Config
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from src.common.config import get_settings
-from src.data.database import get_session_factory
+from src.data.database import get_engine, get_session_factory, reset_engine
 from src.data.models.dish import Dish
 from src.data.models.order import Order
 from src.presentation.api.main import create_app
@@ -24,6 +27,24 @@ def require_mysql() -> None:
     cfg = get_settings()
     if cfg.environment != "testing" or cfg.db_name != "restaurant_test":
         pytest.fail("Refusing destructive integration checks outside testing/restaurant_test")
+
+
+@pytest.fixture(autouse=True)
+def setup_database() -> None:
+    root = Path(__file__).resolve().parents[2]
+    alembic_cfg = Config(str(root / "alembic.ini"))
+    alembic_cfg.set_main_option("script_location", str(root / "src/data/migration"))
+
+    engine = get_engine()
+    from sqlalchemy import MetaData
+
+    meta = MetaData()
+    meta.reflect(bind=engine)
+    meta.drop_all(bind=engine)
+
+    command.upgrade(alembic_cfg, "head")
+    yield
+    reset_engine()
 
 
 @pytest.fixture
