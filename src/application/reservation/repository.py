@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime,timedelta
 
 from src.common.errors import permission_denied
 from src.data.database import session_scope
@@ -26,7 +26,24 @@ class ReservationRepository:
                 "reservation_time": res_time,
                 "status": res_status,
             }
-
+        def find_overlapping_reservations(
+        self,
+        table_id: int,
+        start_time: datetime,
+        end_time: datetime,
+        active_statuses: list[ReservationStatus],
+    ) -> list[Reservation]:
+        with session_scope() as session:
+            return (
+                session.query(Reservation)
+                .filter(
+                    Reservation.table_id == table_id,
+                    Reservation.status.in_(active_statuses),
+                    Reservation.reservation_time < end_time,
+                    Reservation.reservation_time + timedelta(minutes=120) > start_time,
+                )
+                .all()
+            )
     def list_reservations(self) -> list[dict]:
         with session_scope() as session:
             rows = (

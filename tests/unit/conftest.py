@@ -23,10 +23,10 @@ def db_session():
     session = TestingSessionLocal()
 
     table_waiter = User(
-    id=7, 
-    email_normalized="waiter_07@test.com", 
-    display_name="Waiter 07", 
-    password_hash="dummy_hash", 
+    id=7,
+    email_normalized="waiter_07@test.com",
+    display_name="Waiter 07",
+    password_hash="dummy_hash",
     role="waiter"
 )
     dish = Dish(id=12, name="Test Dish - Kung Pao Chicken", price=58.00)
@@ -38,4 +38,5 @@ def db_session():
     yield session
 
     session.close()
+    engine.dispose()
     Base.metadata.drop_all(engine)

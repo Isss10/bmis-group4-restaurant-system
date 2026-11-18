@@ -36,9 +36,7 @@ class ReservationService:
         )
         if conflicts:
             raise ValueError("Time slot is already booked.")
-        
         expires_at = datetime.now(UTC).replace(tzinfo=None) + timedelta(minutes=15)
-        
         return self.repository.create(
             user_id=user_id,
             table_id=table_id,
