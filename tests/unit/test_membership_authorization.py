@@ -1,7 +1,7 @@
 """FR-MEM-02 across mounted modules, using real login-issued sessions.
 
 SQLite verifies HTTP roles, ownership and persisted results, not MySQL locking.
-Review order eligibility remains the review/ordering owners' separate contract;
+Review ordering eligibility remains the review/ordering owners' separate contract;
 these tests prove who can call that service, not that its current stub verifies orders.
 """
 
@@ -35,8 +35,8 @@ WHEN = datetime(2026, 12, 24, 19, 30)
 # (method, path, json body, expected status for a permitted staff role).
 # Updated by the staff module owner: the reservation PATCH now performs a real
 # write and requires {"status": ...} (frozen PENDING/CONFIRMED/CANCELLED
-# vocabulary), and the order PATCH is an honest 404 placeholder until the
-# ordering module ships a backend — no order can exist to update yet. The
+# vocabulary), and the ordering PATCH is an honest 404 placeholder until the
+# ordering module ships a backend — no ordering can exist to update yet. The
 # authorization matrix itself (customer 403, staff roles through, revoked
 # sessions 401) is unchanged; only the request shapes follow the endpoints.
 STAFF_OPERATIONS = [
@@ -271,8 +271,8 @@ def test_customer_review_reaches_existing_business_service_as_self(
         json=authorization.review(),
         headers=authorization.bearer(customer),
     )
-    # This proves authorization and delegation only: M9's current order checker
-    # is a stub, so a 201 here is not evidence of completed-order eligibility.
+    # This proves authorization and delegation only: M9's current ordering checker
+    # is a stub, so a 201 here is not evidence of completed-ordering eligibility.
     assert response.status_code == 201, response.text
     body = response.json()
     assert body["code"] == 0
@@ -293,7 +293,7 @@ def test_authorization_does_not_bypass_review_business_rejection(
     customer = authorization.login()
 
     def reject_order(db: Session, payload: Any) -> Review:
-        raise DishNotInOrderError("Synthetic ineligible order")
+        raise DishNotInOrderError("Synthetic ineligible ordering")
 
     monkeypatch.setattr("src.presentation.api.routers.review.submit_review", reject_order)
     response = authorization.client.post(
@@ -312,8 +312,8 @@ def test_staff_endpoints_follow_four_role_matrix_and_logout_revocation(
 ) -> None:
     # The staff reservation PATCH performs a real write now, so it needs a real
     # row: book one as the customer first, then let the staff role operate on
-    # it. The order endpoints stay honest placeholders until the ordering
-    # module ships a backend — patching any order id is a 404 because no order
+    # it. The ordering endpoints stay honest placeholders until the ordering
+    # module ships a backend — patching any ordering id is a 404 because no ordering
     # can exist yet. The authorization matrix itself (customer 403, staff
     # roles through, revoked sessions 401) is unchanged by any of this.
     customer = authorization.login("customer")

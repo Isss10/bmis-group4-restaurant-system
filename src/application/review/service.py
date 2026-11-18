@@ -10,7 +10,7 @@ M_PARAMETER = 15.0
 
 
 class OrderServiceStub:
-    """Temporary stub to verify order."""
+    """Temporary stub to verify ordering."""
 
     def verify_customer_ordered_dish(
         self, db: Session, customer_id: int, order_id: int, dish_id: int
@@ -71,7 +71,7 @@ def submit_review(
         db, payload.customer_id, payload.order_id, payload.dish_id
     )
     if not is_valid:
-        raise DishNotInOrderError("Dish not in order.")
+        raise DishNotInOrderError("Dish not in ordering.")
 
     new_review = Review(
         customer_id=payload.customer_id,

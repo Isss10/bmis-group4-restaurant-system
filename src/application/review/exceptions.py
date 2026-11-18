@@ -11,12 +11,12 @@ class OrderVerificationError(ReviewDomainError):
 
 
 class DishNotInOrderError(ReviewDomainError):
-    """Dish not in the order."""
+    """Dish not in the ordering."""
 
     pass
 
 
 class ReviewAlreadyExistsError(ReviewDomainError):
-    """Dish already reviewed for this order."""
+    """Dish already reviewed for this ordering."""
 
     pass

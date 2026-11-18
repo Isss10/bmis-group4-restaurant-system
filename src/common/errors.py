@@ -8,7 +8,7 @@ Code format (5 digits):
 
     d1      category      1=request/validation  2=business conflict
                           3=auth/permission     4=not found   5=server
-    d2-d3   module        00 common   01 auth   02 reservation  03 menu/order
+    d2-d3   module        00 common   01 auth   02 reservation  03 menu/ordering
                           04 membership  05 review  06 analytics
                           07 staff backend  08 database layer
     d4-d5   sequence      assigned by the module owner
