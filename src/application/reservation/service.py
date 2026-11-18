@@ -1,7 +1,7 @@
-from datetime import datetime, timedelta, timezone
-from src.common.errors import validation_failed
-from .repository import ReservationRepository
+from datetime import UTC, datetime, timedelta
+
 from .models import ReservationStatus
+from .repository import ReservationRepository
 
 
 class ReservationService:
@@ -23,7 +23,7 @@ class ReservationService:
         return self.repository.list_reservations()
 
     def release_expired_holds(self) -> int:
-        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        now = datetime.now(UTC).replace(tzinfo=None)
         expired_ids = self.repository.find_expired_holds(now)
         count = 0
         for res_id in expired_ids:
@@ -48,7 +48,7 @@ class ReservationService:
         if conflicts:
             raise ValueError("Time slot is already booked.")
 
-        expires_at = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(minutes=15)
+        expires_at = datetime.now(UTC).replace(tzinfo=None) + timedelta(minutes=15)
 
         return self.repository.create(
             user_id=user_id,

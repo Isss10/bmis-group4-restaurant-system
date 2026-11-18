@@ -1,13 +1,14 @@
 import enum
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import Column, DateTime, Enum, Integer, String
+
 from src.data.database import Base
 
 
 def _utc_now_naive() -> datetime:
     """Current UTC time as a naive datetime."""
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 class ReservationStatus(enum.StrEnum):

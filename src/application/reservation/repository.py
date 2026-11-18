@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+
 from src.common.errors import permission_denied
 from src.data.database import session_scope
 
@@ -98,9 +99,9 @@ class ReservationRepository:
             rows = query.all()
             return [
                 {
-                    "id": r.id, 
+                    "id": r.id,
                     "status": r.status
-                } 
+                }
                 for r in rows
             ]
 
