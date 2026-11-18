@@ -34,13 +34,16 @@ def test_get_menu_with_category(client: TestClient):
 def test_submit_order(client: TestClient):
     with patch("src.presentation.api.routers.ordering.OrderingService") as MockService:
         instance = MockService.return_value
-        instance.submit_order = AsyncMock(return_value={
-            "id": 1,
-            "customer_name": "test",
-            "total_price": 10.0,
-            "status": "pending",
-            "items": []
-        })
+        instance.submit_order = AsyncMock(
+            return_value={
+                "id": 1,
+                "customer_name": "test",
+                "total_price": 10.0,
+                "status": "pending",
+                "created_at": "2026-11-16T10:00:00",
+                "items": [],
+            }
+        )
         payload = {"items": [{"dish_id": 1, "quantity": 2}], "customer_name": "test"}
         res = client.post("/api/v1/orders/", json=payload)
         assert res.status_code == 200

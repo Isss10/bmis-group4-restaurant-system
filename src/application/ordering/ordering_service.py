@@ -18,7 +18,10 @@ class OrderingService:
         order_items = []
 
         for item in payload.items:
-            dish = await self.db.scalar(select(Dish).where(Dish.id == item.dish_id))
+            stmt = select(Dish).where(Dish.id == item.dish_id)
+            result = await self.db.execute(stmt)
+            dish = result.scalar_one_or_none()
+
             if not dish:
                 raise ValueError(f"Dish with id {item.dish_id} not found")
 
@@ -45,15 +48,18 @@ class OrderingService:
         return new_order
 
     async def get_order_by_id(self, order_id: int):
-        return await self.db.scalar(select(Order).where(Order.id == order_id))
+        stmt = select(Order).where(Order.id == order_id)
+        result = await self.db.execute(stmt)
+        return result.scalar_one_or_none()
 
     async def list_all_orders(self):
-        result = await self.db.scalars(select(Order))
-        return list(result.all())
+        stmt = select(Order)
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
 
     async def get_menu(self, category: str | None):
-        query = select(Dish)
+        stmt = select(Dish)
         if category:
-            query = query.where(Dish.category == category)
-        result = await self.db.scalars(query)
-        return list(result.all())
+            stmt = stmt.where(Dish.category == category)
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())

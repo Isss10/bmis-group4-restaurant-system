@@ -9,7 +9,7 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import MetaData, select
 
 from src.common.config import get_settings
 from src.data.database import get_engine, get_session_factory, reset_engine
@@ -29,15 +29,13 @@ def require_mysql() -> None:
         pytest.fail("Refusing destructive integration checks outside testing/restaurant_test")
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture(scope="module", autouse=True)
 def setup_database() -> None:
     root = Path(__file__).resolve().parents[2]
     alembic_cfg = Config(str(root / "alembic.ini"))
     alembic_cfg.set_main_option("script_location", str(root / "src/data/migration"))
 
     engine = get_engine()
-    from sqlalchemy import MetaData
-
     meta = MetaData()
     meta.reflect(bind=engine)
     meta.drop_all(bind=engine)
