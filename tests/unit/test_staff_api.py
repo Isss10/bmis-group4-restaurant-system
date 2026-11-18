@@ -4,7 +4,7 @@ Why these exist
 ---------------
 PR #4 shipped the staff router with placeholder handlers; PR #13's contract
 alignment then fixed the path, envelope and auth guard but explicitly left
-"wiring them to the reservation and order services" to the staff module owner.
+"wiring them to the reservation and ordering services" to the staff module owner.
 This branch performs that wiring for the reservation endpoints, and these
 tests pin the new behaviour:
 
@@ -14,9 +14,9 @@ tests pin the new behaviour:
 * missing reservations surface as the frozen 404/40001 envelope;
 * the require_staff() guard still rejects customers and anonymous callers
   (OWASP A01 — the endpoints must not quietly become public again);
-* the order endpoints stay honest placeholders until the ordering module
+* the ordering endpoints stay honest placeholders until the ordering module
   ships a backend (an empty list reads as "nothing to show", a patch on any
-  order id reads as "no such order", because none can exist yet).
+  ordering id reads as "no such ordering", because none can exist yet).
 
 Scope
 -----

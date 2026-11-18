@@ -429,7 +429,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
 def register_middleware(app: FastAPI, settings: Settings | None = None) -> None:
     """Attach CORS, request-context middleware and the error handlers.
 
-    Middleware registration order matters in Starlette: the **last** added is
+    Middleware registration ordering matters in Starlette: the **last** added is
     the outermost. We add CORS last so it wraps everything — including error
     responses, which otherwise reach the browser without CORS headers and
     surface as an opaque network error instead of a readable message.
@@ -462,7 +462,7 @@ def register_middleware(app: FastAPI, settings: Settings | None = None) -> None:
         max_age=600,
     )
 
-    # Registration order: most specific first. Starlette resolves a raised
+    # Registration ordering: most specific first. Starlette resolves a raised
     # exception by exact type, then walks its MRO, so ApiError must be registered
     # before the catch-all Exception handler — otherwise every domain error would
     # be swallowed by unhandled_exception_handler and reported as a generic 50001,

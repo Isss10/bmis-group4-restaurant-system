@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime,timedelta
 
 from src.common.errors import permission_denied
 from src.data.database import session_scope
@@ -26,23 +26,31 @@ class ReservationRepository:
                 "reservation_time": res_time,
                 "status": res_status,
             }
-
-    def list_reservations(self) -> list[dict]:
-        """Return every reservation, oldest ``reservation_time`` first.
-
-        Added by the staff module owner (Objective b) for the back-office list
-        view: ARCHITECTURE.md §7 forbids the staff module from reading the
-        ``reservations`` table directly, so the read has to live here, behind
-        the reservation module's own boundary. Strictly additive — no existing
-        behaviour changes; reservation-module owner please eyeball this in
-        review.
-
-        Values are copied into plain dicts *inside* the session scope so the
-        caller never touches a detached ORM instance (same discipline as
-        ``create`` above).
-        """
+        def find_overlapping_reservations(
+        self,
+        table_id: int,
+        start_time: datetime,
+        end_time: datetime,
+        active_statuses: list[ReservationStatus],
+    ) -> list[Reservation]:
         with session_scope() as session:
-            rows = session.query(Reservation).order_by(Reservation.reservation_time).all()
+            return (
+                session.query(Reservation)
+                .filter(
+                    Reservation.table_id == table_id,
+                    Reservation.status.in_(active_statuses),
+                    Reservation.reservation_time < end_time,
+                    Reservation.reservation_time + timedelta(minutes=120) > start_time,
+                )
+                .all()
+            )
+    def list_reservations(self) -> list[dict]:
+        with session_scope() as session:
+            rows = (
+                session.query(Reservation)
+                .order_by(Reservation.reservation_time)
+                .all()
+            )
             return [
                 {
                     "id": row.id,
@@ -70,11 +78,9 @@ class ReservationRepository:
             )
             if not reservation:
                 return None
-            # The public cancellation route always supplies its verified subject.
-            # Check after locking, within the same transaction as the update.
             if user_id is not None and reservation.user_id != user_id:
                 raise permission_denied()
-            reservation.status = status  # type: ignore
+            reservation.status = status
             session.flush()
             session.refresh(reservation)
             return {

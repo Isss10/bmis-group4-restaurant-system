@@ -14,8 +14,8 @@ from src.common.security import TokenPayload, require_staff
 # the frozen base path `/api/v1/staff` (manual §4.2). The path/envelope/auth
 # groundwork came in with PR #13's contract alignment; this branch wires the
 # reservation endpoints to the real reservation service (the follow-up PR #4's
-# header comment called out) and leaves the order endpoints placeholder-only
-# until the ordering module ships a backend to call — inventing order data here
+# header comment called out) and leaves the ordering endpoints placeholder-only
+# until the ordering module ships a backend to call — inventing ordering data here
 # would only mislead the three frontends.
 #
 # Cross-module rule (ARCHITECTURE.md §7): staff must not read the reservations
@@ -83,5 +83,5 @@ def get_orders(request: Request, _identity: StaffIdentity) -> Any:
 
 @router.patch("/orders/{order_id}")
 def update_order_status(order_id: int, request: Request, _identity: StaffIdentity) -> Any:
-    """Update an order's status (FR-ORD-04). Placeholder — see get_orders."""
+    """Update an ordering's status (FR-ORD-04). Placeholder — see get_orders."""
     raise not_found(f"Order {order_id} not found: ordering backend not implemented yet")
