@@ -18,7 +18,6 @@ class OrderingService:
         order_items = []
 
         for item in payload.items:
-            # 去掉 await，使用同步查询方式
             dish = self.db.scalar(select(Dish).where(Dish.id == item.dish_id))
             if not dish:
                 raise ValueError(f"Dish with id {item.dish_id} not found")
@@ -40,8 +39,8 @@ class OrderingService:
         )
 
         self.db.add(new_order)
-        await self.db.commit()
-        await self.db.refresh(new_order)
+        self.db.commit()
+        self.db.refresh(new_order)
 
         return new_order
 
