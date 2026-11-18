@@ -22,7 +22,13 @@ def db_session():
     TestingSessionLocal = sessionmaker(bind=engine)
     session = TestingSessionLocal()
 
-    table_waiter = User(id=7, username="waiter_07", role="waiter")
+    table_waiter = User(
+    id=7, 
+    email_normalized="waiter_07@test.com", 
+    display_name="Waiter 07", 
+    password_hash="dummy_hash", 
+    role="waiter"
+)
     dish = Dish(id=12, name="Test Dish - Kung Pao Chicken", price=58.00)
     order = Order(id=23, customer_name="Test Customer", total_price=58.00, status="pending")
 
