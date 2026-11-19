@@ -221,6 +221,27 @@ class TestMigrationChain:
         engine = create_engine(url)
         try:
             emptied = set(inspect(engine).get_table_names()) - _IGNORED_TABLES
+            from sqlalchemy import inspect
+
+def test_reservation_migration_columns_and_constraints(engine):
+    inspector = inspect(engine)
+    tables = inspector.get_table_names()
+    assert "reservations" in tables
+
+    cols = {c["name"] for c in inspector.get_columns("reservations")}
+    assert "version" in cols
+    assert "slot_date" in cols
+    assert "slot_start" in cols
+    assert "reservation_time" not in cols
+
+    constraints = inspector.get_constraints("reservations")
+    uq_names = {
+        c["name"]
+        for c in constraints
+        if c.get("type") == "unique"
+    }
+    assert "uq_reservations_table_slot" in uq_names
+
         finally:
             engine.dispose()
         assert not emptied, f"downgrade to base left tables behind: {sorted(emptied)}"
