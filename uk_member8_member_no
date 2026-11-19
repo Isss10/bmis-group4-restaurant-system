@@ -1,0 +1,10 @@
+ALTER TABLE member8 ADD COLUMN version INT NOT NULL DEFAULT 0 COMMENT '乐观锁版本号';
+condition A：
+ALTER TABLE member8 ADD UNIQUE KEY uk_member8_code (member_code);
+condition B：
+ALTER TABLE member8 ADD UNIQUE KEY uk_member8_xxx (col1,col2);
+SELECT member_code,COUNT(*) FROM member8 GROUP BY member_code HAVING COUNT(*) >1;
+UPDATE member8 
+SET name=?, version = version + 1 
+WHERE id=? AND version=?;
+
