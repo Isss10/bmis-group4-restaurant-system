@@ -26,6 +26,7 @@ from src.application.review.exceptions import DishNotInOrderError
 from src.common.config import Settings
 from src.common.security import Role, hash_password
 from src.data.database import Base, get_db
+from src.data.models import Dish, Order, OrderItem  # noqa: F401
 from src.data.schema.membership import AuthPolicyLock, User
 from src.data.schema.review import Review
 from src.presentation.api.main import create_app
@@ -35,10 +36,11 @@ WHEN = datetime(2026, 12, 24, 19, 30)
 # (method, path, json body, expected status for a permitted staff role).
 # Updated by the staff module owner: the reservation PATCH now performs a real
 # write and requires {"status": ...} (frozen PENDING/CONFIRMED/CANCELLED
-# vocabulary), and the ordering PATCH is an honest 404 placeholder until the
-# ordering module ships a backend — no ordering can exist to update yet. The
-# authorization matrix itself (customer 403, staff roles through, revoked
-# sessions 401) is unchanged; only the request shapes follow the endpoints.
+# vocabulary). The order PATCH goes to the real OrderingService too, but this
+# harness creates no order rows, so set_order_status returns None and the
+# frozen 404/40001 still applies — which still proves the staff role passes the
+# guard and reaches the service. The authorization matrix itself (customer 403,
+# staff roles through, revoked sessions 401) is unchanged.
 STAFF_OPERATIONS = [
     ("GET", "/api/v1/staff/reservations", None, 200),
     ("PATCH", "/api/v1/staff/reservations/1", {"status": "CONFIRMED"}, 200),
@@ -98,6 +100,11 @@ def authorization(
     engine = create_engine(
         "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
     )
+    # The Dish/Order/OrderItem imports at the top of this module are intentionally
+    # unused: they register M5's three tables in Base.metadata so create_all()
+    # builds them. create_all() runs before create_app(), which is when the
+    # ordering router (and therefore those models) would otherwise be imported.
+    # Without this, GET /api/v1/staff/orders queries a table that does not exist.
     Base.metadata.create_all(engine)
     factory = sessionmaker(bind=engine, expire_on_commit=False, autoflush=False)
     password, hashed = authorization_credentials
@@ -312,10 +319,11 @@ def test_staff_endpoints_follow_four_role_matrix_and_logout_revocation(
 ) -> None:
     # The staff reservation PATCH performs a real write now, so it needs a real
     # row: book one as the customer first, then let the staff role operate on
-    # it. The ordering endpoints stay honest placeholders until the ordering
-    # module ships a backend — patching any ordering id is a 404 because no ordering
-    # can exist yet. The authorization matrix itself (customer 403, staff
-    # roles through, revoked sessions 401) is unchanged by any of this.
+    # it. The order PATCH reaches the real OrderingService now, but no order
+    # rows exist in this harness, so it resolves to the frozen 404/40001 —
+    # still enough to prove the staff role passes the guard. The authorization
+    # matrix itself (customer 403, staff roles through, revoked sessions 401)
+    # is unchanged by any of this.
     customer = authorization.login("customer")
     created = authorization.client.post(
         "/api/v1/reservations",
