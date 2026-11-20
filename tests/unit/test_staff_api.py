@@ -5,18 +5,15 @@ Why these exist
 PR #4 shipped the staff router with placeholder handlers; PR #13's contract
 alignment then fixed the path, envelope and auth guard but explicitly left
 "wiring them to the reservation and ordering services" to the staff module owner.
-This branch performs that wiring for the reservation endpoints, and these
-tests pin the new behaviour:
+PR #20 wired the reservation endpoints; this branch wires the order endpoints
+to M5's merged OrderingService (FR-ORD-04), and these tests pin the behaviour:
 
-* the list endpoint returns what the reservation repository actually holds,
-  oldest first — not mock data;
-* the status patch really flips the row in the database;
-* missing reservations surface as the frozen 404/40001 envelope;
+* both list endpoints return what the database actually holds, not mock data;
+* both status patches really flip the row, and the order one enforces the
+  FR-ORD-04 state machine (illegal jumps surface as the frozen 422/20003);
+* missing resources surface as the frozen 404/40001 envelope;
 * the require_staff() guard still rejects customers and anonymous callers
-  (OWASP A01 — the endpoints must not quietly become public again);
-* the ordering endpoints stay honest placeholders until the ordering module
-  ships a backend (an empty list reads as "nothing to show", a patch on any
-  ordering id reads as "no such ordering", because none can exist yet).
+  (OWASP A01 — the endpoints must not quietly become public again).
 
 Scope
 -----
@@ -40,15 +37,18 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 import src.data.database as db
+from src.application.ordering.models import OrderStatus
 from src.application.reservation.models import Reservation, ReservationStatus
 from src.application.reservation.repository import ReservationRepository
 from src.common.config import Settings
 from src.common.security import Role
+from src.data.models import Dish, Order, OrderItem
 from src.presentation.api.main import create_app
 
 # Fixed literal timestamps keep the ordering assertions exact.
 _EARLY = datetime(2026, 12, 24, 18, 0)
 _LATE = datetime(2026, 12, 24, 19, 30)
+_ORDER_CREATED_AT = datetime(2026, 12, 24, 18, 0)
 
 RESERVATIONS_URL = "/api/v1/staff/reservations"
 ORDERS_URL = "/api/v1/staff/orders"
@@ -71,8 +71,13 @@ def reservation_db() -> Generator[sessionmaker[Session], None, None]:
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
-    # Only the reservations table is needed; other models use MySQL-specific
-    # types that SQLite cannot render, and these tests do not touch them.
+    # Only the tables the staff module reads through the two services are
+    # needed. Other models use MySQL-specific types SQLite cannot render.
+    # Importing Dish/Order/OrderItem resolves their string-based relationships
+    # before the tables are created (FK order: dishes, orders, order_items).
+    Dish.__table__.create(engine)
+    Order.__table__.create(engine)
+    OrderItem.__table__.create(engine)
     Reservation.__table__.create(engine)
     factory = sessionmaker(bind=engine, class_=Session, expire_on_commit=False)
 
@@ -116,6 +121,32 @@ def client(
 @pytest.fixture
 def waiter_headers(auth_headers) -> dict[str, str]:
     return auth_headers(Role.WAITER, user_id="101")
+
+
+def _make_order(
+    factory: sessionmaker[Session],
+    *,
+    status: str = "pending",
+    customer_name: str = "Alice",
+    total_price: float = 12.5,
+) -> int:
+    """Insert one M5 order row and return its id.
+
+    ``created_at`` is passed explicitly: the model's ``default=datetime.utcnow``
+    emits a DeprecationWarning on Python 3.12+, which this suite's
+    ``filterwarnings=["error"]`` would turn into a failure on the local 3.13
+    environment (CI pins 3.11, where it stays quiet).
+    """
+    with factory() as session:
+        row = Order(
+            customer_name=customer_name,
+            total_price=total_price,
+            status=status,
+            created_at=_ORDER_CREATED_AT,
+        )
+        session.add(row)
+        session.commit()
+        return int(row.id)
 
 
 class TestListReservations:
@@ -217,29 +248,189 @@ class TestUpdateReservationStatus:
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
 
-class TestOrderEndpointsStayPlaceholders:
-    """The ordering module has no backend yet, so these endpoints must not
-    pretend orders exist. When member5's service lands, replace these tests
-    with real ones — they are the module's reminder of the open dependency.
-    """
+class TestListOrders:
+    def test_returns_persisted_orders(
+        self, client, waiter_headers, reservation_db: sessionmaker[Session]
+    ) -> None:
+        first = _make_order(reservation_db, customer_name="Alice", total_price=12.5)
+        second = _make_order(reservation_db, customer_name="Bob", status="ACCEPTED")
 
-    def test_get_orders_returns_an_empty_list(self, client, waiter_headers) -> None:
         response = client.get(ORDERS_URL, headers=waiter_headers)
 
         assert response.status_code == status.HTTP_200_OK
         body = response.json()
         assert body["code"] == 0
-        assert body["data"] == []
+        assert [row["id"] for row in body["data"]] == [first, second]
+        first_row = body["data"][0]
+        assert first_row["customer_name"] == "Alice"
+        assert first_row["total_price"] == 12.5
+        assert isinstance(first_row["total_price"], float)
+        # M5 stores lowercase 'pending'; the read path normalises it.
+        assert first_row["status"] == "PENDING"
+        assert first_row["created_at"] == "2026-12-24T18:00:00"
+        assert "items" not in first_row  # no detached relationship leaks out
+        assert body["data"][1]["status"] == "ACCEPTED"
 
-    def test_patch_order_reports_not_found(self, client, waiter_headers) -> None:
+    def test_empty_database_returns_an_empty_list(self, client, waiter_headers) -> None:
+        response = client.get(ORDERS_URL, headers=waiter_headers)
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["code"] == 0
+        assert response.json()["data"] == []
+
+    def test_customer_is_rejected(self, client, auth_headers) -> None:
+        response = client.get(ORDERS_URL, headers=auth_headers(Role.CUSTOMER))
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert response.json()["code"] == 30003
+
+    def test_anonymous_is_rejected(self, client) -> None:
+        response = client.get(ORDERS_URL)
+
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+        assert response.json()["code"] == 30001
+
+
+class TestUpdateOrderStatus:
+    def test_patch_persists_the_new_status(
+        self, client, waiter_headers, reservation_db: sessionmaker[Session]
+    ) -> None:
+        order_id = _make_order(reservation_db)
+
         response = client.patch(
-            f"{ORDERS_URL}/1", json={"status": "COMPLETED"}, headers=waiter_headers
+            f"{ORDERS_URL}/{order_id}",
+            json={"status": "ACCEPTED"},
+            headers=waiter_headers,
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        body = response.json()
+        assert body["code"] == 0
+        assert body["data"]["status"] == "ACCEPTED"
+        assert body["data"]["id"] == order_id
+
+        with reservation_db() as session:
+            assert session.get(Order, order_id).status == "ACCEPTED"
+
+    @pytest.mark.parametrize(
+        ("step", "target"),
+        list(
+            enumerate(
+                [
+                    OrderStatus.ACCEPTED,
+                    OrderStatus.PREPARING,
+                    OrderStatus.SERVED,
+                    OrderStatus.COMPLETED,
+                ],
+                start=1,
+            )
+        ),
+    )
+    def test_full_happy_path_reaches_each_status(
+        self, client, waiter_headers, reservation_db: sessionmaker[Session], step, target
+    ) -> None:
+        """Walk the frozen chain PENDING -> ... -> COMPLETED one legal hop at a time."""
+        order_id = _make_order(reservation_db)
+        chain = [
+            OrderStatus.ACCEPTED,
+            OrderStatus.PREPARING,
+            OrderStatus.SERVED,
+            OrderStatus.COMPLETED,
+        ]
+        for state in chain[:step]:
+            response = client.patch(
+                f"{ORDERS_URL}/{order_id}",
+                json={"status": state.value},
+                headers=waiter_headers,
+            )
+            assert response.status_code == status.HTTP_200_OK, response.text
+            assert response.json()["data"]["status"] == state.value
+        with reservation_db() as session:
+            assert session.get(Order, order_id).status == target.value
+
+    def test_cancel_from_a_non_terminal_status_is_allowed(
+        self, client, waiter_headers, reservation_db: sessionmaker[Session]
+    ) -> None:
+        order_id = _make_order(reservation_db, status="PREPARING")
+
+        response = client.patch(
+            f"{ORDERS_URL}/{order_id}",
+            json={"status": "CANCELLED"},
+            headers=waiter_headers,
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["data"]["status"] == "CANCELLED"
+
+    def test_illegal_transition_returns_the_frozen_20003(
+        self, client, waiter_headers, reservation_db: sessionmaker[Session]
+    ) -> None:
+        order_id = _make_order(reservation_db)  # PENDING -> COMPLETED is not legal
+        _make_order(reservation_db, status="COMPLETED")
+
+        response = client.patch(
+            f"{ORDERS_URL}/{order_id}",
+            json={"status": "COMPLETED"},
+            headers=waiter_headers,
+        )
+
+        assert response.status_code == 422
+        body = response.json()
+        assert body["code"] == 20003
+        assert body["errors"][0]["field"] == "status"
+        with reservation_db() as session:
+            assert session.get(Order, order_id).status == "pending"  # unchanged
+
+    def test_terminal_status_cannot_move_again(
+        self, client, waiter_headers, reservation_db: sessionmaker[Session]
+    ) -> None:
+        order_id = _make_order(reservation_db, status="COMPLETED")
+
+        response = client.patch(
+            f"{ORDERS_URL}/{order_id}",
+            json={"status": "ACCEPTED"},
+            headers=waiter_headers,
+        )
+
+        assert response.status_code == 422
+        assert response.json()["code"] == 20003
+
+    def test_unknown_order_returns_the_frozen_404(self, client, waiter_headers) -> None:
+        response = client.patch(
+            f"{ORDERS_URL}/999999",
+            json={"status": "ACCEPTED"},
+            headers=waiter_headers,
         )
 
         assert response.status_code == status.HTTP_404_NOT_FOUND
         assert response.json()["code"] == 40001
 
-    def test_get_orders_still_requires_staff(self, client, auth_headers) -> None:
-        response = client.get(ORDERS_URL, headers=auth_headers(Role.CUSTOMER))
+    def test_invalid_status_value_is_rejected_by_validation(self, client, waiter_headers) -> None:
+        response = client.patch(
+            f"{ORDERS_URL}/1",
+            json={"status": "SEATED"},  # not in the FR-ORD-04 vocabulary
+            headers=waiter_headers,
+        )
 
-        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert response.status_code == 422
+        assert response.json()["code"] == 10001
+
+    def test_lowercase_pending_is_compatible(
+        self, client, waiter_headers, reservation_db: sessionmaker[Session]
+    ) -> None:
+        """M5's submit_order writes lowercase 'pending'; patching still works."""
+        order_id = _make_order(reservation_db, status="pending")
+
+        response = client.patch(
+            f"{ORDERS_URL}/{order_id}",
+            json={"status": "ACCEPTED"},
+            headers=waiter_headers,
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["data"]["status"] == "ACCEPTED"
+
+    def test_patch_without_a_token_is_rejected(self, client) -> None:
+        response = client.patch(f"{ORDERS_URL}/1", json={"status": "ACCEPTED"})
+
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
