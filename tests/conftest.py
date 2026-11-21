@@ -24,6 +24,7 @@ import pytest
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.sql.functions import now
 
+
 @compiles(now, "sqlite")
 def compile_now_sqlite(element, compiler, **kw):
     return "CURRENT_TIMESTAMP"
@@ -33,11 +34,11 @@ os.environ.setdefault("APP_JWT_SECRET_KEY", secrets.token_urlsafe(48))
 os.environ.setdefault("APP_DB_NAME", "restaurant_test")
 os.environ.setdefault("APP_CORS_ORIGINS", "http://localhost:5173")
 
-from fastapi.testclient import TestClient
+from fastapi.testclient import TestClient  # noqa: E402 - must import after env vars are set
 
-from src.common.config import Settings, get_settings
-from src.common.security import Role, create_access_token
-from src.presentation.api.main import create_app
+from src.common.config import Settings, get_settings  #noqa:E402
+from src.common.security import Role, create_access_token  #noqa:E402
+from src.presentation.api.main import create_app  #noqa:E402
 
 
 @pytest.fixture(autouse=True)

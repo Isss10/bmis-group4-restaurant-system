@@ -1,8 +1,9 @@
 from datetime import UTC, datetime, timedelta
+from typing import ClassVar
 
 from .models import ReservationStatus
 from .repository import ReservationRepository
-from typing import ClassVar
+
 
 class ReservationService:
     ALLOWED_TRANSITIONS: ClassVar[dict] = {
