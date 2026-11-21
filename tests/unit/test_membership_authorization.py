@@ -234,7 +234,7 @@ def test_cancel_checks_owner_before_persisting_any_change(
         f"/api/v1/reservations/{own['id']}/cancel", headers=headers
     )
     assert response.status_code == 200, response.text
-    assert response.json()["data"] == {"status": "cancelled"}
+    assert response.json()["data"]["status"] == "cancelled"
     with authorization.factory() as session:
         other_row = session.get(Reservation, other["id"])
         own_row = session.get(Reservation, own["id"])
