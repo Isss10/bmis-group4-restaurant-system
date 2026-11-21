@@ -2,10 +2,10 @@ from datetime import UTC, datetime, timedelta
 
 from .models import ReservationStatus
 from .repository import ReservationRepository
-
+from typing import ClassVar
 
 class ReservationService:
-    ALLOWED_TRANSITIONS = {
+    ALLOWED_TRANSITIONS: ClassVar[dict] = {
         ReservationStatus.PENDING: {
             ReservationStatus.CONFIRMED,
             ReservationStatus.CANCELLED,

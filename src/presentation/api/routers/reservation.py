@@ -21,13 +21,12 @@ class ReservationCreateSchema(BaseModel):
 
 
 def _format_status_lowercase(res: Any) -> Any:
-    if isinstance(res, dict):
-        if "status" in res and res["status"] is not None:
-            val = res["status"]
-            if hasattr(val, "value"):
-                res["status"] = val.value.lower()
-            else:
-                res["status"] = str(val).lower()
+    if isinstance(res, dict) and "status" in res and res["status"] is not None:
+        val = res["status"]
+        if hasattr(val, "value"):
+            res["status"] = val.value.lower()
+        else:
+            res["status"] = str(val).lower()
     return res
 
 
