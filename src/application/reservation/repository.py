@@ -7,7 +7,6 @@ from .models import Reservation, ReservationStatus
 
 
 class ReservationRepository:
-
     def create(
         self,
         user_id: str,
@@ -97,13 +96,7 @@ class ReservationRepository:
             if exclude_id:
                 query = query.filter(Reservation.id != exclude_id)
             rows = query.all()
-            return [
-                {
-                    "id": r.id,
-                    "status": r.status
-                }
-                for r in rows
-            ]
+            return [{"id": r.id, "status": r.status} for r in rows]
 
     def find_expired_holds(self, current_time: datetime) -> list[int]:
         with session_scope() as session:
@@ -116,4 +109,3 @@ class ReservationRepository:
                 .all()
             )
             return [r.id for r in rows]
-
