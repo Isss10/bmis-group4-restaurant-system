@@ -62,7 +62,7 @@ def _iter_module_names() -> list[str]:
     """Every importable module under ``src/``, as a dotted name, sorted.
 
     Sorted so that failures are reported deterministically and so that the
-    import order does not depend on filesystem enumeration order — a model that
+    import ordering does not depend on filesystem enumeration ordering — a model that
     only imports cleanly after another one would otherwise pass or fail based on
     the operating system.
     """

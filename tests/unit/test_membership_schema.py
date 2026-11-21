@@ -53,7 +53,6 @@ def _migration() -> ModuleType:
 def test_auth_migration_matches_model_and_seeds_lock() -> None:
     engine = create_engine("sqlite://")
     with engine.begin() as connection:
-        # The prior main-branch migration owns this table, not revision 0004.
         AuditLog.__table__.create(connection)
         with Operations.context(MigrationContext.configure(connection)):
             _migration().upgrade()
@@ -147,8 +146,9 @@ def test_offline_mysql_migration_owns_auth_tables_only() -> None:
 
 def test_membership_is_the_single_head_after_main_migrations() -> None:
     script = ScriptDirectory.from_config(_alembic_config("sqlite://"))
-    assert script.get_heads() == ["0004"]
+    assert script.get_heads() == ["97393cdd0b6c"]
     assert [revision.revision for revision in script.walk_revisions()] == [
+        "97393cdd0b6c",
         "0004",
         "0003",
         "0002",
@@ -200,7 +200,9 @@ def test_main_database_upgrade_and_module_rollback_preserve_business_data(tmp_pa
                 )
                 tables = set(inspect(connection).get_table_names())
                 assert tables == (
-                    before_tables | _AUTH_TABLES if operation == "upgrade" else before_tables
+                    before_tables | _AUTH_TABLES | {"dishes", "orders", "order_items"}
+                    if operation == "upgrade"
+                    else before_tables
                 )
                 if operation == "upgrade":
                     assert connection.scalar(select(AuthPolicyLock.id)) == 1
@@ -210,7 +212,11 @@ def test_main_database_upgrade_and_module_rollback_preserve_business_data(tmp_pa
             assert set(inspect(connection).get_table_names()) == {"alembic_version"}
         command.upgrade(config, "head")
         with engine.connect() as connection:
-            assert set(inspect(connection).get_table_names()) == before_tables | _AUTH_TABLES
+            assert set(inspect(connection).get_table_names()) == before_tables | _AUTH_TABLES | {
+                "dishes",
+                "orders",
+                "order_items",
+            }
     finally:
         engine.dispose()
 

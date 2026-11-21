@@ -1,7 +1,7 @@
 """FR-MEM-02 across mounted modules, using real login-issued sessions.
 
 SQLite verifies HTTP roles, ownership and persisted results, not MySQL locking.
-Review order eligibility remains the review/ordering owners' separate contract;
+Review ordering eligibility remains the review/ordering owners' separate contract;
 these tests prove who can call that service, not that its current stub verifies orders.
 """
 
@@ -26,6 +26,7 @@ from src.application.review.exceptions import DishNotInOrderError
 from src.common.config import Settings
 from src.common.security import Role, hash_password
 from src.data.database import Base, get_db
+from src.data.models import Dish, Order, OrderItem  # noqa: F401
 from src.data.schema.membership import AuthPolicyLock, User
 from src.data.schema.review import Review
 from src.presentation.api.main import create_app
@@ -35,10 +36,11 @@ WHEN = datetime(2026, 12, 24, 19, 30)
 # (method, path, json body, expected status for a permitted staff role).
 # Updated by the staff module owner: the reservation PATCH now performs a real
 # write and requires {"status": ...} (frozen PENDING/CONFIRMED/CANCELLED
-# vocabulary), and the order PATCH is an honest 404 placeholder until the
-# ordering module ships a backend — no order can exist to update yet. The
-# authorization matrix itself (customer 403, staff roles through, revoked
-# sessions 401) is unchanged; only the request shapes follow the endpoints.
+# vocabulary). The order PATCH goes to the real OrderingService too, but this
+# harness creates no order rows, so set_order_status returns None and the
+# frozen 404/40001 still applies — which still proves the staff role passes the
+# guard and reaches the service. The authorization matrix itself (customer 403,
+# staff roles through, revoked sessions 401) is unchanged.
 STAFF_OPERATIONS = [
     ("GET", "/api/v1/staff/reservations", None, 200),
     ("PATCH", "/api/v1/staff/reservations/1", {"status": "CONFIRMED"}, 200),
@@ -98,6 +100,11 @@ def authorization(
     engine = create_engine(
         "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
     )
+    # The Dish/Order/OrderItem imports at the top of this module are intentionally
+    # unused: they register M5's three tables in Base.metadata so create_all()
+    # builds them. create_all() runs before create_app(), which is when the
+    # ordering router (and therefore those models) would otherwise be imported.
+    # Without this, GET /api/v1/staff/orders queries a table that does not exist.
     Base.metadata.create_all(engine)
     factory = sessionmaker(bind=engine, expire_on_commit=False, autoflush=False)
     password, hashed = authorization_credentials
@@ -271,8 +278,8 @@ def test_customer_review_reaches_existing_business_service_as_self(
         json=authorization.review(),
         headers=authorization.bearer(customer),
     )
-    # This proves authorization and delegation only: M9's current order checker
-    # is a stub, so a 201 here is not evidence of completed-order eligibility.
+    # This proves authorization and delegation only: M9's current ordering checker
+    # is a stub, so a 201 here is not evidence of completed-ordering eligibility.
     assert response.status_code == 201, response.text
     body = response.json()
     assert body["code"] == 0
@@ -293,7 +300,7 @@ def test_authorization_does_not_bypass_review_business_rejection(
     customer = authorization.login()
 
     def reject_order(db: Session, payload: Any) -> Review:
-        raise DishNotInOrderError("Synthetic ineligible order")
+        raise DishNotInOrderError("Synthetic ineligible ordering")
 
     monkeypatch.setattr("src.presentation.api.routers.review.submit_review", reject_order)
     response = authorization.client.post(
@@ -312,10 +319,11 @@ def test_staff_endpoints_follow_four_role_matrix_and_logout_revocation(
 ) -> None:
     # The staff reservation PATCH performs a real write now, so it needs a real
     # row: book one as the customer first, then let the staff role operate on
-    # it. The order endpoints stay honest placeholders until the ordering
-    # module ships a backend — patching any order id is a 404 because no order
-    # can exist yet. The authorization matrix itself (customer 403, staff
-    # roles through, revoked sessions 401) is unchanged by any of this.
+    # it. The order PATCH reaches the real OrderingService now, but no order
+    # rows exist in this harness, so it resolves to the frozen 404/40001 —
+    # still enough to prove the staff role passes the guard. The authorization
+    # matrix itself (customer 403, staff roles through, revoked sessions 401)
+    # is unchanged by any of this.
     customer = authorization.login("customer")
     created = authorization.client.post(
         "/api/v1/reservations",
