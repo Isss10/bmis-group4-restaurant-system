@@ -31,7 +31,7 @@ class ReservationStatusUpdateSchema(BaseModel):
     """Body for the back-office status patch."""
 
     status: ReservationStatus
-    """Target state: PENDING, CONFIRMED or CANCELLED (frozen vocabulary)."""
+    """Target state from the 7-state ReservationStatus vocabulary (FR-RES-06)."""
 
 
 @router.get("/reservations")
