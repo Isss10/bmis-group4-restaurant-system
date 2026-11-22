@@ -404,15 +404,29 @@ CI 的 `test-integration` 作业有真实 MySQL 8 服务并跑 `alembic upgrade 
 
 这不是"改不改"的问题——**必须有人改**，因为 CI 的 `test-unit` 跑全量、`ci-passed` 依赖它，不改就合不进 main。我按约定没动别人的文件，改法已逐行写在第四节。
 
-**执行顺序（组长已选 A，此处更正本文档早先写反的顺序）**
+**执行顺序（组长已选 A；本段已两次更正，以这版为准）**
 
-早先版本把方案 A 写成"M3/M10 各自改完、我再开 PR"，那是个死锁：他们要改的断言（`PENDING`→`HELD`、`reservation_time`→`slot_date`、`repo.create()` 签名）必须以我的最终契约为依据，看不到我的代码就没法改。正确顺序是：
+早先版本把方案 A 写成"M3/M10 各自改完、我再开 PR"，那是个死锁：他们要改的断言（`PENDING`→`HELD`、`reservation_time`→`slot_date`、`repo.create()` 签名）必须以我的最终契约为依据，看不到我的代码就没法改。
 
-1. **我先推完整版到 `feature/reservation-state-machine`**（PR #34）← 已完成，见提交 `424da44` / `4460cb3`
-2. M3、M10 各自在自己分支上按第四节改，**改完再合进 main**
-3. 两边都绿之后，PR #34 才具备合并条件
+**还有一个更容易踩的坑，必须先说**：`origin/main` 上**仍然是三态**（`PENDING`/`CONFIRMED`/`CANCELLED`），七态只存在于 `feature/reservation-state-machine`。所以 M3/M10 **不能从 main 拉分支**——在 main 的代码上把 `PENDING` 改成 `HELD` 会直接 `AttributeError`，白干一场。
 
-在第 2 步完成前，**PR #34 的 CI 必然是红的，这是预期状态、是工作清单，不是缺陷**。
+正确做法是**以我的分支为基点**：
+
+```bash
+git fetch origin
+git checkout -b fix/staff-tests-reservation-contract origin/feature/reservation-state-machine
+# 按第四节改，然后
+git push -u origin fix/staff-tests-reservation-contract
+```
+
+在这个基点上，第 1 步和第 2 步之间还有一层循环依赖要打破：PR #34 的 CI 红是因为他们的测试失败，而他们的测试只有在七态代码进了 main 之后才可能通过。两条可行路线，**请组长选一条**：
+
+| 路线 | 做法 | 代价 |
+|---|---|---|
+| **甲（更简单，我建议）** | M3/M10 把测试修正**直接提交到 `feature/reservation-state-machine`**（同仓库分支，有写权限即可），或开 PR 以**我的分支为 base**。PR #34 一次全绿后合并，main 上不会有红的时间窗。 | 需要他们对仓库有写权限；改动会记在我的 PR 里，commit author 仍是他们 |
+| 乙 | 组长用管理员权限先合 PR #34（CI 红），M3/M10 紧接着对 main 开修正 PR | main 会有一段 CI 红的时间；需要动用绕过分支保护的权限 |
+
+无论哪条，在第 2 步完成前 **PR #34 的 CI 必然是红的，这是预期状态、是工作清单，不是缺陷**。
 
 工作量：**M3 约 4 处、M10 约 6 处，绝大部分是机械适配**（换字段名、换枚举值、换迁移头断言），照着抄即可。只有 **1 处涉及设计判断**：4.2 改法 4 的取消响应形状，`origin/main` 的断言期望 `data` 只含 `{"status": ...}`，而我返回完整资源——这一处需要 M1 在甲/乙之间裁决，不是 M10 自己能定的。
 
