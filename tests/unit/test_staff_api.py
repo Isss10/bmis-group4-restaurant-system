@@ -27,7 +27,7 @@ session that reads) and restored afterwards.
 from __future__ import annotations
 
 from collections.abc import Generator
-from datetime import datetime
+from datetime import date, datetime, time, timedelta
 
 import pytest
 from fastapi import status
@@ -39,15 +39,20 @@ from sqlalchemy.pool import StaticPool
 import src.data.database as db
 from src.application.ordering.models import OrderStatus
 from src.application.reservation.models import Reservation, ReservationStatus
-from src.application.reservation.repository import ReservationRepository
+from src.application.reservation.repository import ReservationRepository, utc_now_naive
+from src.common.audit import AuditLog
 from src.common.config import Settings
 from src.common.security import Role
 from src.data.models import Dish, Order, OrderItem
 from src.presentation.api.main import create_app
 
-# Fixed literal timestamps keep the ordering assertions exact.
-_EARLY = datetime(2026, 12, 24, 18, 0)
-_LATE = datetime(2026, 12, 24, 19, 30)
+# M2's 7-state contract replaced the free-form reservation_time with a
+# discrete slot: a date plus a start time on the frozen 30-minute grid.
+_SLOT_DATE = date(2026, 12, 24)
+_EARLY = time(18, 0)
+_LATE = time(19, 30)
+# Orders (M5) still store a full timestamp; pass it explicitly to avoid the
+# model's deprecated datetime.utcnow default under Python 3.12+.
 _ORDER_CREATED_AT = datetime(2026, 12, 24, 18, 0)
 
 RESERVATIONS_URL = "/api/v1/staff/reservations"
@@ -75,10 +80,13 @@ def reservation_db() -> Generator[sessionmaker[Session], None, None]:
     # needed. Other models use MySQL-specific types SQLite cannot render.
     # Importing Dish/Order/OrderItem resolves their string-based relationships
     # before the tables are created (FK order: dishes, orders, order_items).
+    # AuditLog is required: M2's repository.create() now writes an audit row in
+    # the same transaction (FR-RES-08), so omitting it breaks every seeded hold.
     Dish.__table__.create(engine)
     Order.__table__.create(engine)
     OrderItem.__table__.create(engine)
     Reservation.__table__.create(engine)
+    AuditLog.__table__.create(engine)
     factory = sessionmaker(bind=engine, class_=Session, expire_on_commit=False)
 
     saved_engine, saved_factory = db._engine, db._session_factory
@@ -149,11 +157,22 @@ def _make_order(
         return int(row.id)
 
 
+def _create_reservation(*, user_id: str, table_id: int, slot_start: time) -> dict:
+    """Seed one HELD reservation via M2's repository (new keyword-only API)."""
+    return ReservationRepository().create(
+        user_id=user_id,
+        table_id=table_id,
+        slot_date=_SLOT_DATE,
+        slot_start=slot_start,
+        party_size=2,
+        expires_at=utc_now_naive() + timedelta(minutes=10),
+    )
+
+
 class TestListReservations:
     def test_returns_persisted_rows_oldest_first(self, client, waiter_headers) -> None:
-        repo = ReservationRepository()
-        late = repo.create(user_id="u-1", table_id=7, reservation_time=_LATE)
-        early = repo.create(user_id="u-2", table_id=3, reservation_time=_EARLY)
+        late = _create_reservation(user_id="u-1", table_id=7, slot_start=_LATE)
+        early = _create_reservation(user_id="u-2", table_id=3, slot_start=_EARLY)
 
         response = client.get(RESERVATIONS_URL, headers=waiter_headers)
 
@@ -164,9 +183,10 @@ class TestListReservations:
         first = body["data"][0]
         assert first["user_id"] == "u-2"
         assert first["table_id"] == 3
-        assert first["status"] == "PENDING"
-        # Naive datetimes serialise as ISO-8601 without an offset.
-        assert first["reservation_time"] == "2026-12-24T18:00:00"
+        assert first["status"] == "HELD"
+        # The slot is now a date plus a 30-minute-grid time, not a datetime.
+        assert first["slot_date"] == "2026-12-24"
+        assert first["slot_start"] == "18:00:00"
 
     def test_empty_database_returns_an_empty_list(self, client, waiter_headers) -> None:
         response = client.get(RESERVATIONS_URL, headers=waiter_headers)
@@ -199,7 +219,7 @@ class TestUpdateReservationStatus:
     def test_patch_persists_the_new_status(
         self, client, waiter_headers, reservation_db: sessionmaker[Session]
     ) -> None:
-        created = ReservationRepository().create(user_id="u-9", table_id=5, reservation_time=_EARLY)
+        created = _create_reservation(user_id="u-9", table_id=5, slot_start=_EARLY)
 
         response = client.patch(
             f"{RESERVATIONS_URL}/{created['id']}",
@@ -228,19 +248,46 @@ class TestUpdateReservationStatus:
         assert response.json()["code"] == 40001
 
     def test_patch_with_an_invalid_status_is_rejected(self, client, waiter_headers) -> None:
-        """The body's status must be one of the three frozen enum members.
+        """A value outside the 7-state vocabulary is rejected by validation.
 
-        A bare 422 literal: starlette renamed ``HTTP_422_UNPROCESSABLE_ENTITY``
-        and this suite runs with warnings-as-errors, so the constant's
-        deprecation warning would fail the test before its own assertion ran.
+        ``SEATED`` used to be a convenient invalid value under the old 3-state
+        enum, but it is a legal state now, so send a value that is in no state
+        at all. A bare 422 literal: starlette renamed
+        ``HTTP_422_UNPROCESSABLE_ENTITY`` and this suite runs with
+        warnings-as-errors, so the constant's deprecation warning would fail
+        the test before its own assertion ran.
         """
         response = client.patch(
             f"{RESERVATIONS_URL}/1",
-            json={"status": "SEATED"},  # not in the frozen vocabulary
+            json={"status": "NOT_A_STATUS"},
             headers=waiter_headers,
         )
 
         assert response.status_code == 422
+        assert response.json()["code"] == 10001
+
+    def test_patch_illegal_transition_returns_the_frozen_20003(
+        self, client, waiter_headers, reservation_db: sessionmaker[Session]
+    ) -> None:
+        """A legal state the current state cannot reach is rejected by the
+        service-layer state machine (ARCHITECTURE.md section 9), not pydantic.
+        """
+        created = _create_reservation(user_id="u-10", table_id=9, slot_start=_EARLY)
+
+        response = client.patch(
+            f"{RESERVATIONS_URL}/{created['id']}",
+            json={"status": "COMPLETED"},  # HELD -> COMPLETED skips CONFIRMED/SEATED
+            headers=waiter_headers,
+        )
+
+        assert response.status_code == 422
+        body = response.json()
+        assert body["code"] == 20003
+        assert body["errors"][0]["field"] == "status"
+        with reservation_db() as session:
+            row = session.get(Reservation, created["id"])
+            assert row is not None
+            assert row.status is ReservationStatus.HELD  # unchanged
 
     def test_patch_without_a_token_is_rejected(self, client) -> None:
         response = client.patch(f"{RESERVATIONS_URL}/1", json={"status": "CONFIRMED"})
