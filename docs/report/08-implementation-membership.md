@@ -174,9 +174,10 @@ The schema tests check the relationship between migrations and model metadata. P
 #10's [MySQL CI run](https://github.com/Isss10/bmis-group4-restaurant-system/actions/runs/42481861999)
 exercised duplicate registration, refresh and administrator races, transactional
 rollback and the membership migration. At the current main baseline, the integration
-file contains a placeholder, so authenticating on MySQL needs a fresh run once the
-real cases are restored. The frontend workflow runs type checking, session handling
-tests and a production build. The seven-state reservation handoff calls for updating
-the booking fixture and historical migration checks while preserving the authentication
-acceptance conditions. Chapter 12 records execution evidence and the acceptance still
+file contains a placeholder. This follow-up restores the real cases in isolated
+test schemas. Chapter 12 should use the new CI run when recording their outcome.
+The frontend workflow runs type checking, session handling tests and a production
+build. The seven-state reservation handoff updates the booking fixture and
+historical migration checks while preserving the authentication acceptance
+conditions. Chapter 12 records execution evidence and the acceptance still
 required for full T4.
