@@ -20,10 +20,9 @@ from alembic.config import Config
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from alembic.script import ScriptDirectory
-from sqlalchemy import create_engine, insert, inspect, select, text
+from sqlalchemy import MetaData, Table, create_engine, insert, inspect, select, text
 from sqlalchemy.exc import IntegrityError
 
-from src.application.reservation.models import Reservation, ReservationStatus
 from src.common.audit import AuditLog
 from src.data.database import Base
 from src.data.schema.membership import AuthPolicyLock, AuthSession, UsedRefreshToken, User
@@ -144,17 +143,15 @@ def test_offline_mysql_migration_owns_auth_tables_only() -> None:
     assert "INSERT INTO auth_policy_lock (id) VALUES (1)" in ddl
 
 
-def test_membership_is_the_single_head_after_main_migrations() -> None:
+def test_membership_revision_descends_from_main_migrations_under_one_head() -> None:
     script = ScriptDirectory.from_config(_alembic_config("sqlite://"))
-    assert script.get_heads() == ["97393cdd0b6c"]
-    assert [revision.revision for revision in script.walk_revisions()] == [
-        "97393cdd0b6c",
-        "0004",
-        "0003",
-        "0002",
-        "0001",
-    ]
-    assert _migration().down_revision == "0003"
+    heads = script.get_heads()
+    assert len(heads) == 1, f"expected a single migration head, got {heads}"
+    assert {"0001", "0002", "0003", "0004"} <= {
+        revision.revision for revision in script.walk_revisions(head=heads[0])
+    }
+    membership = script.get_revision("0004")
+    assert membership is not None and membership.down_revision == "0003"
 
 
 def test_main_database_upgrade_and_module_rollback_preserve_business_data(tmp_path: Path) -> None:
@@ -165,44 +162,49 @@ def test_main_database_upgrade_and_module_rollback_preserve_business_data(tmp_pa
         command.upgrade(config, "0003")
         with engine.begin() as connection:
             before_tables = set(inspect(connection).get_table_names())
+            # Reflect the deployed revision before models gain any newer columns.
+            metadata = MetaData()
+            audit = Table("audit_logs", metadata, autoload_with=connection)
+            reservation = Table("reservations", metadata, autoload_with=connection)
             connection.execute(
-                insert(AuditLog),
+                audit.insert(),
                 {
                     "id": 41,
                     "action": "reservation.created",
                     "entity_type": "Reservation",
                     "entity_id": "51",
+                    "occurred_at": datetime(2026, 11, 8, 12),
                 },
             )
             connection.execute(
-                insert(Reservation),
+                reservation.insert(),
                 {
                     "id": 51,
                     "user_id": "existing-main-customer",
                     "table_id": 3,
                     "reservation_time": datetime(2026, 11, 23, 12),
-                    "status": ReservationStatus.CONFIRMED,
+                    "status": "CONFIRMED",
                     "created_at": datetime(2026, 11, 8, 12),
                 },
             )
-            original_audit = connection.execute(select(AuditLog)).mappings().one()
-            original_reservation = connection.execute(select(Reservation)).mappings().one()
+            original_audit = connection.execute(select(audit)).mappings().one()
+            original_reservation = connection.execute(select(reservation)).mappings().one()
 
+        # Membership owns 0004. Newer reservation migrations have a separate
+        # upgrade path, and the legacy slot backfill runs only on MySQL.
         for operation in ("upgrade", "downgrade", "upgrade"):
             if operation == "upgrade":
-                command.upgrade(config, "head")
+                command.upgrade(config, "0004")
             else:
                 command.downgrade(config, "0003")
             with engine.connect() as connection:
-                assert connection.execute(select(AuditLog)).mappings().one() == original_audit
+                assert connection.execute(select(audit)).mappings().one() == original_audit
                 assert (
-                    connection.execute(select(Reservation)).mappings().one() == original_reservation
+                    connection.execute(select(reservation)).mappings().one() == original_reservation
                 )
                 tables = set(inspect(connection).get_table_names())
                 assert tables == (
-                    before_tables | _AUTH_TABLES | {"dishes", "orders", "order_items"}
-                    if operation == "upgrade"
-                    else before_tables
+                    before_tables | _AUTH_TABLES if operation == "upgrade" else before_tables
                 )
                 if operation == "upgrade":
                     assert connection.scalar(select(AuthPolicyLock.id)) == 1
@@ -212,11 +214,7 @@ def test_main_database_upgrade_and_module_rollback_preserve_business_data(tmp_pa
             assert set(inspect(connection).get_table_names()) == {"alembic_version"}
         command.upgrade(config, "head")
         with engine.connect() as connection:
-            assert set(inspect(connection).get_table_names()) == before_tables | _AUTH_TABLES | {
-                "dishes",
-                "orders",
-                "order_items",
-            }
+            assert before_tables | _AUTH_TABLES <= set(inspect(connection).get_table_names())
     finally:
         engine.dispose()
 
