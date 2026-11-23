@@ -122,6 +122,9 @@ jobs:
           fi
           echo "OK: no empty source files."
 
+      - name: Block a nested copy of the project in the root
+        run: bash scripts/check_nested_project_copy.sh
+
       # Untrusted text (PR titles, commit messages) is bound to env and never
       # interpolated into the shell — direct interpolation allows script
       # injection from a crafted PR title.
@@ -597,7 +600,47 @@ jobs:
           echo "::notice::No Dockerfile yet. Docker packaging is scheduled for the Final Preparation phase (14 Dec 2026)."
 
   # ---------------------------------------------------------------------------
-  # 8. Aggregate gate. Branch protection should require ONLY this job, so that
+  # 8. Model-discovery guard — every module under src/ must import.
+  #
+  #    src/data/model_discovery.py imports all of them so Alembic autogenerate
+  #    and the migration-completeness guard see the full Base.metadata, and it
+  #    treats an import failure as fatal. That failure is already caught by the
+  #    unit, integration and docker jobs, but as three unrelated-looking errors
+  #    (a completeness test, an Alembic crash, a container that never becomes
+  #    healthy) that cost minutes to trace back to one unimportable file.
+  #
+  #    This job reports the actual cause in seconds and names the file. On
+  #    19 Nov 2026 a branch added src/models/reservation.py containing
+  #    `from .base import Base` while src/models/base.py did not exist; merging
+  #    it would have broken the migration chain for all ten members.
+  # ---------------------------------------------------------------------------
+  model-discovery:
+    name: Model discovery
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Import every module under src/
+        env:
+          APP_ENVIRONMENT: testing
+          # Random per-run secret so the check never depends on a committed value.
+          APP_JWT_SECRET_KEY: ${{ github.run_id }}-${{ github.sha }}-ci-only-not-a-real-secret
+          APP_DB_NAME: restaurant_test
+          PYTHONPATH: .
+        run: python scripts/check_model_imports.py
+
+  # ---------------------------------------------------------------------------
+  # 9. Aggregate gate. Branch protection should require ONLY this job, so that
   #    adding or removing a job above never means re-editing the ruleset.
   # ---------------------------------------------------------------------------
   ci-passed:
@@ -611,6 +654,7 @@ jobs:
       - test-integration
       - frontend
       - docker
+      - model-discovery
     if: always()
     steps:
       - name: Summarise results
