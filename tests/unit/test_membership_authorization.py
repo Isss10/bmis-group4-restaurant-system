@@ -10,7 +10,7 @@ from __future__ import annotations
 import secrets
 from collections.abc import Generator
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import time, timedelta
 from typing import Any
 
 import pytest
@@ -21,7 +21,7 @@ from sqlalchemy.pool import StaticPool
 
 import src.data.database as database
 from src.application.reservation.models import Reservation, ReservationStatus
-from src.application.reservation.repository import ReservationRepository
+from src.application.reservation.repository import ReservationRepository, utc_now_naive
 from src.application.review.exceptions import DishNotInOrderError
 from src.common.config import Settings
 from src.common.security import Role, hash_password
@@ -32,11 +32,11 @@ from src.data.schema.review import Review
 from src.presentation.api.main import create_app
 
 ORIGIN = "http://localhost:5173"
-WHEN = datetime(2026, 12, 24, 19, 30)
+SLOT_DATE = utc_now_naive().date() + timedelta(days=1)
+SLOT_START = time(19, 30)
 # (method, path, json body, expected status for a permitted staff role).
-# Updated by the staff module owner: the reservation PATCH now performs a real
-# write and requires {"status": ...} (frozen PENDING/CONFIRMED/CANCELLED
-# vocabulary). The order PATCH goes to the real OrderingService too, but this
+# The reservation PATCH advances a real hold from HELD to CONFIRMED. The
+# order PATCH goes to the real OrderingService too, but this
 # harness creates no order rows, so set_order_status returns None and the
 # frozen 404/40001 still applies — which still proves the staff role passes the
 # guard and reaches the service. The authorization matrix itself (customer 403,
@@ -70,7 +70,12 @@ class AuthorizationHarness:
         return {"Authorization": f"Bearer {login['access_token']}"}
 
     def booking(self, user_id: str | None = None) -> dict[str, Any]:
-        body: dict[str, Any] = {"table_id": 7, "reservation_time": WHEN.isoformat()}
+        body: dict[str, Any] = {
+            "table_id": 7,
+            "slot_date": SLOT_DATE.isoformat(),
+            "slot_start": SLOT_START.isoformat(),
+            "party_size": 2,
+        }
         if user_id is not None:
             body["user_id"] = user_id
         return body
@@ -200,7 +205,9 @@ def test_customer_booking_uses_verified_subject(
     assert response.json()["code"] == 0
     with authorization.factory() as session:
         row = session.get(Reservation, response.json()["data"]["id"])
-        assert row is not None and row.user_id == user_id
+        assert row is not None
+        assert row.user_id == user_id
+        assert row.status == ReservationStatus.HELD
 
 
 def test_customer_cannot_create_booking_for_another_identity(
@@ -222,8 +229,23 @@ def test_cancel_checks_owner_before_persisting_any_change(
 ) -> None:
     customer = authorization.login()
     repo = ReservationRepository()
-    other = repo.create(str(authorization.ids["other"]), 1, WHEN)
-    own = repo.create(str(authorization.ids["customer"]), 2, WHEN)
+    expires_at = utc_now_naive() + timedelta(minutes=10)
+    other = repo.create(
+        user_id=str(authorization.ids["other"]),
+        table_id=1,
+        slot_date=SLOT_DATE,
+        slot_start=SLOT_START,
+        party_size=2,
+        expires_at=expires_at,
+    )
+    own = repo.create(
+        user_id=str(authorization.ids["customer"]),
+        table_id=2,
+        slot_date=SLOT_DATE,
+        slot_start=SLOT_START,
+        party_size=2,
+        expires_at=expires_at,
+    )
     headers = authorization.bearer(customer)
     assert_failure(
         authorization.client.post(f"/api/v1/reservations/{other['id']}/cancel", headers=headers),
@@ -234,11 +256,12 @@ def test_cancel_checks_owner_before_persisting_any_change(
         f"/api/v1/reservations/{own['id']}/cancel", headers=headers
     )
     assert response.status_code == 200, response.text
+    assert response.json()["code"] == 0
     assert response.json()["data"]["status"] == "cancelled"
     with authorization.factory() as session:
         other_row = session.get(Reservation, other["id"])
         own_row = session.get(Reservation, own["id"])
-        assert other_row is not None and other_row.status == ReservationStatus.PENDING
+        assert other_row is not None and other_row.status == ReservationStatus.HELD
         assert own_row is not None and own_row.status == ReservationStatus.CANCELLED
     assert_failure(
         authorization.client.post("/api/v1/reservations/999999/cancel", headers=headers),
