@@ -60,13 +60,13 @@ Status legend: ⬜ not started · 🟨 drafted · 🟩 reviewed · ✅ merged in
 | # | Chapter | Author | Support | Target pages | Due | Status |
 |---|---|---|---|---|---|---|
 | 1 | Introduction & Project Context | **M1** | all | 4–5 | 16 Nov | 🟨 |
-| 2 | Functional & Non-Functional Requirements | M10 | M1 | 5–6 | 16 Nov | ⬜ |
+| 2 | Functional & Non-Functional Requirements | M10 | M1 | 5–6 | 16 Nov | 🟨 |
 | 3 | Use Cases & Requirements Modelling | M3 | M2, M5 | 6–7 | 20 Nov | ⬜ |
 | 4 | System Design & Architecture | **M1** | M8 | 8–9 | 23 Nov | ⬜ |
 | 5 | Database Design | M8 | M1 | 4–5 | 23 Nov | ⬜ |
 | 6 | Implementation — Reservation & Ordering | M2 | M5 | 4–5 | 27 Nov | ⬜ |
 | 7 | Implementation — Staff Backend | M3 | — | 3 | 27 Nov | ⬜ |
-| 8 | Implementation — Membership & Loyalty | M10 | M4 | 4 | 27 Nov | ⬜ |
+| 8 | Implementation — Membership & Loyalty | M10 | M4 | 4 | 27 Nov | 🟨 |
 | 9 | Implementation — Ratings & Reviews | M9 | — | 3–4 | 27 Nov | ⬜ |
 | 10 | Implementation — Analytics & Recommendation | M6 | — | 4–5 | 4 Dec | ⬜ |
 | 11 | Engineering Quality | **M1** | M10, M4 | 4 | 4 Dec | ⬜ |

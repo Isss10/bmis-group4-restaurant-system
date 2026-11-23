@@ -271,6 +271,28 @@ computed; questions 7–9 change what the analytics module measures. Deciding th
 means rewriting migrations and tests, which is the single most expensive rework available to this
 team.
 
+### 6.1 Membership rules proposed for review on 23 November
+
+This draft gives M4 and M10 concrete acceptance cases for FR-MEM-03 and
+FR-MEM-05. Rows 5 and 6 remain open pending agreement. M4's 9 November API handoff describes
+the loyalty prototype. The prototype and its tests currently live in a nested
+project copy, while the running application exposes the Member10 authentication
+API and supplies the verified account ID for future loyalty calls.
+
+| Rule | Proposed behaviour | Acceptance examples |
+|---|---|---|
+| 5. Points earning and expiry | Award `floor(actual paid amount / ¥10)` once per completed order, using the order ID to deduplicate retries. Each award expires 12 calendar months after its recorded UTC earning time, using the last day of the target month if necessary. Exclude the points at the expiry instant. | ¥9.99 gives 0 points, ¥10 gives 1, and ¥29.99 gives 2. Re-delivery of the same order adds 0 new points. An award on 1 March 2027 expires at the same UTC time on 1 March 2028. |
+| 6. Coupon evaluation order | Validate ownership, availability, expiry and the minimum spend on the original subtotal. Apply any eligible tier discount first. An `EXCLUSIVE` coupon is used without other coupons. For `STACKABLE` coupons, apply percentage coupons on the remaining amount, then fixed-amount coupons. Within each class, evaluate in ascending issued-coupon ID order. Round each amount to cents using half-up rounding and cap the reduction at the remaining payable amount. A quote does not consume a coupon. | With no tier discount, a ¥100 subtotal, a 10% coupon and a ¥20 coupon produce ¥70 payable. A ¥30 fixed coupon against ¥10 remaining reduces the payable amount to ¥0. An `EXCLUSIVE` coupon and a second coupon together are rejected. |
+
+The prototype applies 365 elapsed days to points. For the March 2027 example
+that yields 29 February 2028, one day earlier than the proposed calendar rule.
+M4 can align the implementation and its expiry boundary tests after the team
+confirms the convention. For coupon acceptance, M4 and M5 can check that an
+accepted quote and the matching redemption agree when the order and coupons have
+not changed, and that two concurrent redemptions cannot spend the same issued
+coupon. See [Chapter 8](../report/08-implementation-membership.md) for the prototype
+and integration status.
+
 ---
 
 ## 7. Traceability matrix
