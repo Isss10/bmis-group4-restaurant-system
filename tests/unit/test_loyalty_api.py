@@ -49,6 +49,8 @@ def loyalty_client(settings: Any) -> Generator[tuple[TestClient, Session], None,
     )
     db.commit()
     app = create_app(settings)
+    # Auth session validity is independently tested by the membership suite.
+    app.state.auth_validator = lambda _token: None
 
     def _session_override() -> Generator[Session, None, None]:
         yield db

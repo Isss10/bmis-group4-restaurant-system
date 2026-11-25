@@ -4,7 +4,7 @@ The loyalty API is mounted at `/api/v1/membership`. Authentication and user
 administration are separate endpoints; this document only covers completed
 loyalty functionality.
 
-The generated [OpenAPI document](openapi.json) is the source of truth for field
+The generated [OpenAPI document](docs/api/openapi.json) is the source of truth for field
 validation and response schemas.
 
 ## Permissions

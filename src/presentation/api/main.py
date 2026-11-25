@@ -127,6 +127,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     install_membership(app)
 
+    # Loyalty is separate from membership authentication.
+    from src.presentation.api.routers.loyalty import router as loyalty_router
+
+    app.include_router(loyalty_router, prefix="/api/v1/membership", tags=["membership"])
+
     _register_module_routers(app)
     return app
 

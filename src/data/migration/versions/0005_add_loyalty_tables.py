@@ -1,7 +1,7 @@
 """add points, tiers and coupon tables for the loyalty module
 
-Revision ID: 0004
-Revises: 0003
+Revision ID: 0005
+Revises: 97393cdd0b6c
 Create Date: 2026-11-07
 """
 
@@ -11,8 +11,8 @@ from decimal import Decimal
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0004"
-down_revision: str | None = "0003"
+revision: str = "0005"
+down_revision: str | None = "97393cdd0b6c"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
@@ -272,27 +272,12 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index("ix_user_coupons_user_status", table_name="user_coupons")
-    op.drop_index("ix_user_coupons_order_id", table_name="user_coupons")
-    op.drop_index("ix_user_coupons_coupon_id", table_name="user_coupons")
-    op.drop_index("ix_user_coupons_user_id", table_name="user_coupons")
+    # Drop child tables before their referenced parent tables. Dropping a table
+    # also removes its indexes. In MySQL, explicitly dropping an index first
+    # can fail with error 1553 when a foreign key still relies on that index.
     op.drop_table("user_coupons")
-
-    op.drop_index("ix_coupons_validity", table_name="coupons")
     op.drop_table("coupons")
-
-    op.drop_index("ix_points_allocations_earn_ledger_id", table_name="points_allocations")
-    op.drop_index("ix_points_allocations_spend_ledger_id", table_name="points_allocations")
     op.drop_table("points_allocations")
-
-    op.drop_index("ix_points_user_created", table_name="points_ledger")
-    op.drop_index("ix_points_ledger_expires_at", table_name="points_ledger")
-    op.drop_index("ix_points_ledger_txn_type", table_name="points_ledger")
-    op.drop_index("ix_points_ledger_user_id", table_name="points_ledger")
     op.drop_table("points_ledger")
-
-    op.drop_index("ix_loyalty_order_events_user_id", table_name="loyalty_order_events")
     op.drop_table("loyalty_order_events")
-
-    op.drop_index("ix_membership_tiers_spend", table_name="membership_tiers")
     op.drop_table("membership_tiers")

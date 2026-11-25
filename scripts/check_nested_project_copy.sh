@@ -61,9 +61,8 @@ cd "$REPO_ROOT" || exit 1
 # ---------------------------------------------------------------------------
 # Registered debt: nested copies already on main when this guard was added.
 #
-# PR #24 merged its copy before the guard existed, and that directory is
-# currently the ONLY copy of the loyalty module — deleting it now would destroy
-# a teammate's work, so it stays until the module is moved into the real tree.
+# The nested upload from PR #24 has been migrated into the real source tree.
+# Remove its temporary exception now that the duplicate directory is gone.
 #
 # Entries here are warned about on every run rather than failed, so the guard
 # never turns every unrelated PR red because of pre-existing debt. An entry must
@@ -74,9 +73,7 @@ cd "$REPO_ROOT" || exit 1
 #
 # Format: "<directory>|<reason it is still here>|<condition for removing it>"
 # ---------------------------------------------------------------------------
-REGISTERED_DEBT=(
-  "bmis-group4-restaurant-system-upload-20261107|Only remaining copy of the loyalty module (PR #24 uploaded it here)|Remove this entry once M4 has moved the loyalty files into src/ and deleted the directory"
-)
+REGISTERED_DEBT=()
 
 # Top-level directories that belong to this project. A marker inside any of
 # these is expected and must not be reported.
@@ -87,7 +84,7 @@ MARKERS='(^|/)(alembic\.ini|pyproject\.toml|requirements(-dev)?\.txt|requirement
 
 _is_registered() {
   local candidate="$1" entry dir
-  for entry in "${REGISTERED_DEBT[@]}"; do
+  for entry in ${REGISTERED_DEBT[@]+"${REGISTERED_DEBT[@]}"}; do
     dir="${entry%%|*}"
     [ "$dir" = "$candidate" ] && return 0
   done
@@ -96,7 +93,7 @@ _is_registered() {
 
 _debt_note() {
   local candidate="$1" entry dir rest
-  for entry in "${REGISTERED_DEBT[@]}"; do
+  for entry in ${REGISTERED_DEBT[@]+"${REGISTERED_DEBT[@]}"}; do
     dir="${entry%%|*}"
     if [ "$dir" = "$candidate" ]; then
       rest="${entry#*|}"
@@ -148,7 +145,7 @@ done
 
 # A registered entry whose directory has been cleaned up must be deleted from
 # the list above, otherwise the exemption outlives the debt it was granted for.
-for entry in "${REGISTERED_DEBT[@]}"; do
+for entry in ${REGISTERED_DEBT[@]+"${REGISTERED_DEBT[@]}"}; do
   dir="${entry%%|*}"
   if [ ! -d "$dir" ]; then
     echo "::error::Stale entry in REGISTERED_DEBT: $dir/ no longer exists."
@@ -202,7 +199,7 @@ fi
 # the file and the directory it should be in, which is enough for a reviewer to
 # ask for a move, and enough to stop a third copy from being added silently.
 # ---------------------------------------------------------------------------
-ALLOWED_ROOT_FILES='^(\.env\.example|\.gitattributes|\.gitignore|alembic\.ini|CONTRIBUTING\.md|INSTALL\.md|pyproject\.toml|README\.md|requirements-dev\.txt|requirements\.txt)$'
+ALLOWED_ROOT_FILES='^(\.env\.example|\.gitattributes|\.gitignore|alembic\.ini|CONTRIBUTING\.md|INSTALL\.md|LOYALTY_API\.md|pyproject\.toml|README\.md|requirements-dev\.txt|requirements\.txt)$'
 
 echo ""
 echo "Checking for unexpected loose files in the repository root..."
