@@ -5,12 +5,10 @@ negative events (redemption, expiry, negative adjustment) consume those lots
 through :class:`PointsAllocation`. The user's balance is therefore derived, not
 stored on a mutable profile row.
 
-``user_id`` is deliberately a string here. The auth implementation is being
-delivered in a separate PR and ``users`` does not exist on main yet. Keeping the
-same string representation as the JWT ``sub`` claim lets the loyalty module be
-tested and integrated without creating a competing user table. Once the auth
-migration lands, a follow-up migration can add the foreign keys without
-rewriting the domain API.
+``user_id`` is a string matching the verified JWT ``sub`` claim. The
+authentication user table is managed by the existing membership migration;
+this module does not create a duplicate user table. Foreign-key hardening
+can be considered separately without changing the domain API.
 """
 
 from __future__ import annotations
