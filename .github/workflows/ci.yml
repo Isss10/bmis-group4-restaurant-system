@@ -440,7 +440,7 @@ jobs:
           fi
           echo "OK: no model/migration drift."
 
-      - name: Run integration and concurrency tests
+      - name: Run integration tests
         env:
           APP_ENVIRONMENT: testing
           APP_JWT_SECRET_KEY: ${{ github.run_id }}-${{ github.sha }}-ci-only-not-a-real-secret
@@ -464,7 +464,7 @@ jobs:
           # meaningful. The floor is enforced by the test-unit job, which is
           # where the coverage actually comes from.
           set +e
-          pytest tests/integration tests/concurrency \
+          pytest tests/integration \
             -m "integration or concurrency" \
             --cov=src --cov-report=term-missing --cov-report=xml:coverage/integration.xml \
             --cov-fail-under=0 \
@@ -477,7 +477,45 @@ jobs:
             exit 0
           fi
           exit "$CODE"
+            - name: Run concurrency tests in isolated MySQL database
+        env:
+          APP_ENVIRONMENT: testing
+          APP_JWT_SECRET_KEY: ${{ github.run_id }}-${{ github.sha }}-ci-only-not-a-real-secret
+          APP_DB_HOST: 127.0.0.1
+          APP_DB_PORT: "3306"
+          APP_DB_USER: root
+          APP_DB_PASSWORD: ci-root-password
+          APP_DB_NAME: restaurant_booking_test
+          BOOKING_TEST_DB_NAME: restaurant_booking_test
+        run: |
+          set -e
 
+          echo "Creating an isolated concurrency test database..."
+          mysql --host="$APP_DB_HOST" \
+            --port="$APP_DB_PORT" \
+            --user="$APP_DB_USER" \
+            --password="$APP_DB_PASSWORD" \
+            -e "CREATE DATABASE restaurant_booking_test CHARACTER SET utf8mb4;"
+
+          echo "Applying migrations to the concurrency database..."
+          alembic upgrade head
+
+          echo "Tables in the concurrency test database:"
+          mysql --host="$APP_DB_HOST" \
+            --port="$APP_DB_PORT" \
+            --user="$APP_DB_USER" \
+            --password="$APP_DB_PASSWORD" \
+            "$APP_DB_NAME" -e "SHOW TABLES;"
+
+          echo "Running real MySQL concurrency tests..."
+          pytest tests/concurrency \
+            -m "integration or concurrency" \
+            -v \
+            --cov=src \
+            --cov-report=term-missing \
+            --cov-report=xml:coverage/concurrency.xml \
+            --cov-fail-under=0 \
+            --junitxml=reports/concurrency.xml
       - name: Upload integration coverage
         if: always()
         uses: actions/upload-artifact@v4

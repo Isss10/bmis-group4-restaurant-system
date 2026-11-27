@@ -171,9 +171,8 @@ def test_exactly_one_booking_wins(run_index: int, request: pytest.FixtureRequest
         ]
         results = [future.result() for future in as_completed(futures)]
 
-    assert (
-        len(results) == N_WORKERS
-    ), f"Run {run_index}: received {len(results)} of {N_WORKERS} responses"
+    message = f"Run {run_index}: received {len(results)} of {N_WORKERS} responses"
+    assert len(results) == N_WORKERS, message
     successes = [
         r for r in results if r.status_code in SUCCESS_STATUSES and r.body.get("code", 0) == 0
     ]
