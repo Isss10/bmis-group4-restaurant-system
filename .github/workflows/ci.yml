@@ -501,7 +501,7 @@ jobs:
           alembic upgrade head
 
           echo "Tables in the concurrency test database:"
-          mysql --host="$APP_DB_HOST" \
+          mysql --host="$APP_DB_HOST" --port="$APP_DB_PORT" --user="$APP_DB_USER" --password="$APP_DB_PASSWORD" "$APP_DB_NAME" -e "SHOW TABLES;"
             --port="$APP_DB_PORT" \
             --user="$APP_DB_USER" \
             --password="$APP_DB_PASSWORD" \
