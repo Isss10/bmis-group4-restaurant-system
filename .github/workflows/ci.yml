@@ -477,7 +477,7 @@ jobs:
             exit 0
           fi
           exit "$CODE"
-            - name: Run concurrency tests in isolated MySQL database
+      - name: Run concurrency tests in isolated MySQL database
         env:
           APP_ENVIRONMENT: testing
           APP_JWT_SECRET_KEY: ${{ github.run_id }}-${{ github.sha }}-ci-only-not-a-real-secret
