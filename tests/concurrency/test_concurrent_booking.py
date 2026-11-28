@@ -13,7 +13,9 @@ database name when the name does not contain "test".
 from __future__ import annotations
 
 import os
+import secrets
 import threading
+from collections.abc import Generator
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
@@ -138,20 +140,54 @@ def _one_booking(
         client.close()
 
 
-@pytest.mark.parametrize("run_index", range(REPEATS))
-def test_exactly_one_booking_wins(run_index: int, request: pytest.FixtureRequest) -> None:
-    """Verify all HTTP responses and the database state for each race."""
-    try:
-        customer_token = request.getfixturevalue("customer_token")
-    except pytest.FixtureLookupError:
-        customer_token = os.getenv("BOOKING_TEST_CUSTOMER_TOKEN")
-    if not customer_token:
-        pytest.fail(
-            "Provide a customer_token pytest fixture or set "
-            "BOOKING_TEST_CUSTOMER_TOKEN to a dedicated test Customer JWT."
+@pytest.fixture(scope="module")
+def booking_identity() -> Generator[tuple[Any, str], None, None]:
+    """Register and authenticate one customer in the dedicated test database."""
+    _require_dedicated_mysql()
+    app = _build_app()
+    email = f"booking-ci-{secrets.token_hex(8)}@example.com"
+    password = f"Aa1!{secrets.token_urlsafe(24)}"
+
+    with TestClient(app) as client:
+        registered = client.post(
+            "/api/v1/auth/register",
+            json={
+                "email": email,
+                "password": password,
+                "display_name": "Concurrency Test Customer",
+            },
         )
-    if customer_token.startswith("Bearer "):
-        customer_token = customer_token.removeprefix("Bearer ")
+        register_code = registered.json().get("code")
+        assert registered.status_code == 201, "Test customer registration failed"
+        assert register_code == 0, "Registration returned a business error"
+
+        logged_in = client.post(
+            "/api/v1/auth/login",
+            json={"email": email, "password": password},
+        )
+        login_code = logged_in.json().get("code")
+        assert logged_in.status_code == 200, "Test customer login failed"
+        assert login_code == 0, "Login returned a business error"
+        token = logged_in.json()["data"]["access_token"]
+        if not isinstance(token, str) or not token:
+            pytest.fail("Login did not return a valid access token")
+
+        profile = client.get(
+            "/api/v1/membership/profile",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        profile_code = profile.json().get("code")
+        assert profile.status_code == 200, "Test customer authentication failed"
+        assert profile_code == 0, "Profile returned a business error"
+        assert profile.json()["data"]["role"] == "customer"
+
+        yield app, token
+
+
+@pytest.mark.parametrize("run_index", range(REPEATS))
+def test_exactly_one_booking_wins(run_index: int, booking_identity: tuple[Any, str]) -> None:
+    """Verify all HTTP responses and the database state for each race."""
+    app, customer_token = booking_identity
     _require_dedicated_mysql()
 
     reservation_time = _reservation_time_for_run(run_index)
@@ -162,7 +198,6 @@ def test_exactly_one_booking_wins(run_index: int, request: pytest.FixtureRequest
         "the test does not delete other people's data."
     )
 
-    app = _build_app()
     barrier = threading.Barrier(N_WORKERS)
     with ThreadPoolExecutor(max_workers=N_WORKERS) as pool:
         futures = [
